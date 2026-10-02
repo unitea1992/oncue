@@ -6,7 +6,7 @@ authors = ["Unitea"]
 license = "MIT"
 repository = "https://github.com/unitea1992/oncue"
 edition = "2021"
-rust-version = "1.88"
+rust-version = "1.90"
 
 [lib]
 name = "oncue_lib"
