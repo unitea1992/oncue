@@ -1,0 +1,29 @@
+// Layer A (tests/ui + wdio.conf.ts) の型検査専用。
+// 本番 tsconfig.json とは分け、runtime 実行 (wdio の transpileOnly) に影響させない。
+// - types は node/mocha の最小限。wdio 本体・expect・tauri-service の実型は
+//   下の include で宣言ファイルを取り込み、browser.tauri 等を any 扱いにしない。
+// - lib に ES2024 を含めるのは wdio.conf.ts の Promise.withResolvers のため。
+// - exclude を空にして既定の node_modules 除外を外し、上の宣言取込みを有効にする。
+{
+  "compilerOptions": {
+    "target": "ES2020",
+    "lib": ["ES2024", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "noEmit": true,
+    "strict": true,
+    "skipLibCheck": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noFallthroughCasesInSwitch": true,
+    "types": ["node", "mocha"]
+  },
+  "include": [
+    "./**/*.ts",
+    "../../wdio.conf.ts",
+    "../../node_modules/webdriverio/build/index.d.ts",
+    "../../node_modules/expect-webdriverio/types/expect-webdriverio.d.ts",
+    "../../node_modules/@wdio/native-types/dist/esm/index.d.ts"
+  ],
+  "exclude": []
+}

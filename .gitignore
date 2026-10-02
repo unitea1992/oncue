@@ -1,0 +1,37 @@
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+node_modules
+dist
+dist-ssr
+*.local
+
+# Runtime data (never distribute, never commit)
+data/
+cache/
+
+# Portable release artifacts (built by CI)
+oncue-portable-windows-x64/
+oncue-*-portable-windows-x64.zip
+oncue-*-portable-windows-x64.zip.sha256
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+.opencode/
+
+# Local agent tooling
+.claude/

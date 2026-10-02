@@ -1,0 +1,270 @@
+/* イベント画面と追加・編集フォーム */
+.event-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.event-item {
+  position: relative;
+  display: grid;
+  grid-template-columns: 96px minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 8px 16px;
+  padding: 14px 12px 14px 18px;
+  border-top: 1px solid var(--line);
+}
+
+.event-item:first-child {
+  border-top: none;
+}
+
+.event-item.is-selected {
+  background: var(--house-soft);
+}
+
+.event-item.is-selected::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 4px;
+  background: var(--house);
+}
+
+.event-when {
+  display: flex;
+  flex-direction: column;
+}
+
+.event-when-time {
+  font-size: 32px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.event-when-sub {
+  margin-top: 4px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.event-item.is-expired .event-when-time,
+.event-item.is-expired .event-name {
+  color: var(--muted);
+}
+
+.event-main {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.event-name {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+  font-size: 15px;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+.event-facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 12px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.event-pick {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.event-picked {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--house-text);
+  white-space: nowrap;
+}
+
+.event-picked-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--house);
+}
+
+.event-tools {
+  display: flex;
+  gap: 2px;
+}
+
+.event-debug {
+  grid-column: 2 / -1;
+  font-size: 13px;
+}
+
+.event-debug > summary {
+  cursor: pointer;
+  color: var(--muted);
+  font-weight: 700;
+  width: fit-content;
+}
+
+.event-debug-body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-top: 8px;
+}
+
+.event-debug-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.event-debug-buttons button {
+  min-height: 32px;
+  font-size: 13px;
+}
+
+.event-debug-result {
+  white-space: pre-wrap;
+}
+
+.events-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 28px;
+  border: 1px dashed var(--line-strong);
+  border-radius: 12px;
+  background: var(--surface);
+}
+
+.events-empty h2 {
+  font-size: 17px;
+}
+
+.events-empty p {
+  color: var(--muted);
+}
+
+/* ---------- Form ---------- */
+.field-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.field-row input {
+  flex: 1;
+  min-width: 220px;
+}
+
+.field-ok {
+  color: var(--go-text);
+}
+
+.schedule-field {
+  margin: 0;
+  padding: 0;
+  border: none;
+  min-width: 0;
+}
+
+.schedule-field legend {
+  padding: 0;
+  margin-bottom: 6px;
+}
+
+.schedule-field .segmented {
+  align-self: flex-start;
+}
+
+.schedule-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 12px;
+}
+
+.schedule-row .field {
+  flex: 1 1 140px;
+}
+
+.schedule-field .hint,
+.schedule-field .error-message,
+.schedule-field .field-ok {
+  white-space: pre-line;
+}
+
+.calendar-options {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 200px;
+  overflow: auto;
+}
+
+.calendar-option {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-m);
+  cursor: pointer;
+}
+
+.calendar-option:has(input:checked) {
+  border-color: var(--house);
+  background: var(--house-soft);
+}
+
+.calendar-option-title {
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.calendar-option-date {
+  font-size: 16px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+@media (max-width: 640px) {
+  .event-item {
+    grid-template-columns: 76px minmax(0, 1fr);
+  }
+
+  .event-when-time {
+    font-size: 26px;
+  }
+
+  .event-pick,
+  .event-tools {
+    grid-column: 2;
+  }
+
+  .event-debug {
+    grid-column: 1 / -1;
+  }
+}

@@ -1,0 +1,60 @@
+{
+  "name": "oncue",
+  "private": true,
+  "version": "0.2.0-rc.3",
+  "type": "module",
+  "license": "MIT",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview",
+    "tauri": "tauri",
+    "test": "tsc src/lib/schedule.ts --target es2020 --module esnext --moduleResolution bundler --skipLibCheck --declaration false --sourceMap false --outDir node_modules/.schedule-test && node --test src/lib/schedule.test.mjs",
+    "test:version": "node --test scripts/verify-version.test.mjs",
+    "test:rust": "cd src-tauri && cargo test",
+    "test:rust:verbose": "cd src-tauri && cargo test -- --nocapture",
+    "test:rust:unit": "cd src-tauri && cargo test --lib",
+    "test:rust:watch": "cd src-tauri && cargo watch -x test",
+    "version:check": "node scripts/verify-version.mjs",
+    "version:sync": "node scripts/verify-version.mjs --sync",
+    "test:ui": "start-server-and-test dev http://localhost:1420 'wdio run ./wdio.conf.ts'",
+    "test:ui:typecheck": "tsc --noEmit -p tests/ui/tsconfig.ui.json"
+  },
+  "dependencies": {
+    "@tauri-apps/api": "^2",
+    "lucide-react": "^0",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0"
+  },
+  "devDependencies": {
+    "@puppeteer/browsers": "^3.2.3",
+    "@tauri-apps/cli": "^2",
+    "@types/mocha": "^10",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^6.1.1",
+    "@wdio/cli": "^9",
+    "@wdio/globals": "^9",
+    "@wdio/local-runner": "^9",
+    "@wdio/mocha-framework": "^9",
+    "@wdio/spec-reporter": "^9",
+    "@wdio/tauri-service": "^1",
+    "chromedriver": "^152.0.0",
+    "start-server-and-test": "^2",
+    "ts-node": "^10",
+    "typescript": "~5.9.3",
+    "vite": "^8.3.1"
+  },
+  "allowScripts": {
+    "chromedriver@152.0.3": true
+  },
+  "overrides": {
+    "deepmerge-ts": "^8.0.2",
+    "@puppeteer/browsers": "$@puppeteer/browsers",
+    "serialize-javascript": "^7.1.2",
+    "basic-ftp": "^6.2.1"
+  }
+}

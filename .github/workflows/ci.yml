@@ -1,0 +1,89 @@
+# GitHub-hosted quality gate (ubuntu-latest)。
+# UI typecheck / renderer-domain tests / フロントエンドビルド (検証専用) /
+# Layer A (renderer-only) / cargo fmt を pull_request + main push で回す。
+#
+# 注意:
+# - Rust tests/clippy は含めない。src-tauri に cfg(windows) ゲートの
+#   コードがあり、Linux 上の test/clippy では本番構成を検証できないため、
+#   Windows 側の gate に一任する。ここでは構成非依存の cargo fmt のみ行う。
+# - フロントエンドビルドは検証専用。Windows 側へ独立ビルドは追加せず、
+#   beforeBuildCommand は一本化のままにする。
+# - Layer A は既存 wdio.conf.ts をそのまま使う (本ファイルから読むだけ)。
+name: CI (hosted quality gate)
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths-ignore:
+      - "docs/**"
+      - "README.md"
+  push:
+    branches: [main]
+    paths-ignore:
+      - "docs/**"
+      - "README.md"
+
+# 最小権限原則: 読み取りのみ
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name != 'workflow_dispatch' }}
+
+jobs:
+  quality-gate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+    - name: Setup Node.js
+      uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+      with:
+        node-version: '24'
+
+    - name: Setup Rust (fmt only)
+      uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable action code
+      with:
+        toolchain: stable
+        components: rustfmt
+
+    - name: Install dependencies
+      run: npm ci
+
+    - name: UI typecheck
+      run: npm run test:ui:typecheck
+
+    - name: Renderer-domain tests
+      run: npm test
+
+    # 検証専用: 成果物の扱いは変えず、Windows 側へ独立ビルドは追加しない。
+    - name: Frontend build (verification only)
+      run: npm run build
+
+    # Layer A (renderer-only)。開発サーバーを立てて既存 wdio.conf.ts を実行する。
+    # サーバーの起動・停止はこのステップ内で完結させる。
+    # ランナー同梱Chromeとnpmのchromedriverの版ずれを避けるため、版の揃った組を取得して使う。
+    - name: Layer A UI tests
+      env:
+        WDIO_FORCE_BROWSER_DOWNLOAD: '1'
+      run: |
+        npm run dev -- --port 1420 --strictPort &
+        vite_pid=$!
+        cleanup() { kill "$vite_pid" 2>/dev/null || true; }
+        trap cleanup EXIT
+        ready=0
+        for _ in $(seq 1 60); do
+          if curl -fsS -o /dev/null --max-time 2 http://localhost:1420; then ready=1; break; fi
+          sleep 2
+        done
+        if [ "$ready" != "1" ]; then echo 'dev server not ready' >&2; exit 1; fi
+        npx wdio run ./wdio.conf.ts
+      shell: bash
+
+    - name: Rust fmt
+      working-directory: src-tauri
+      run: cargo fmt -- --check

@@ -1,0 +1,99 @@
+name: Check Rust MSRV
+
+on:
+  pull_request:
+    paths:
+      - 'src-tauri/Cargo.toml'
+      - 'src-tauri/Cargo.lock'
+      - '.github/workflows/msrv.yml'
+  push:
+    branches:
+      - main
+    paths:
+      - 'src-tauri/Cargo.toml'
+      - 'src-tauri/Cargo.lock'
+      - '.github/workflows/msrv.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name != 'workflow_dispatch' }}
+
+jobs:
+  dependency-msrv:
+    name: Dependency MSRV guard
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable action code
+        with:
+          toolchain: stable
+
+      - name: Resolve Windows dependency metadata
+        run: >-
+          cargo metadata
+          --locked
+          --manifest-path src-tauri/Cargo.toml
+          --filter-platform x86_64-pc-windows-msvc
+          --format-version 1
+          > cargo-metadata.json
+
+      - name: Verify dependency MSRV does not exceed application MSRV
+        shell: python
+        run: |
+          import json
+          import sys
+
+          with open('cargo-metadata.json', encoding='utf-8') as f:
+              metadata = json.load(f)
+
+          root_id = metadata['resolve']['root']
+          packages = {package['id']: package for package in metadata['packages']}
+          active_ids = {node['id'] for node in metadata['resolve']['nodes']}
+          root = packages[root_id]
+          declared = root.get('rust_version')
+
+          if not declared:
+              print('Application rust-version is not declared.', file=sys.stderr)
+              sys.exit(1)
+
+          def version_tuple(value):
+              parts = value.split('-', 1)[0].split('.')
+              numeric = tuple(int(part) for part in parts)
+              return numeric + (0,) * (3 - len(numeric))
+
+          declared_tuple = version_tuple(declared)
+          dependencies = []
+          offenders = []
+
+          for package_id in active_ids:
+              if package_id == root_id:
+                  continue
+              package = packages[package_id]
+              rust_version = package.get('rust_version')
+              if not rust_version:
+                  continue
+              item = (version_tuple(rust_version), package['name'], package['version'], rust_version)
+              dependencies.append(item)
+              if item[0] > declared_tuple:
+                  offenders.append(item)
+
+          dependencies.sort(reverse=True)
+          print(f"Application MSRV: Rust {declared}")
+          if dependencies:
+              _, name, version, rust_version = dependencies[0]
+              print(f"Highest declared dependency MSRV: {name} {version} -> Rust {rust_version}")
+
+          if offenders:
+              print('Dependencies exceeding application MSRV:', file=sys.stderr)
+              for _, name, version, rust_version in sorted(offenders, reverse=True):
+                  print(f"- {name} {version}: Rust {rust_version}", file=sys.stderr)
+              sys.exit(1)

@@ -1,0 +1,101 @@
+/* 設定 */
+.settings {
+  gap: 20px;
+}
+
+.settings-section h2 {
+  margin-bottom: 8px;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.settings-box {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+}
+
+.settings-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px 14px;
+  min-height: 56px;
+  padding: 10px 16px;
+  border-top: 1px solid var(--line);
+}
+
+.settings-row:first-child {
+  border-top: none;
+}
+
+.settings-key {
+  flex: 1;
+  min-width: 180px;
+  display: flex;
+  flex-direction: column;
+}
+
+.avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  object-fit: cover;
+  background: var(--house);
+  color: var(--house-ink);
+  font-weight: 700;
+  font-size: 16px;
+}
+
+.user-name {
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+.about {
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  font-size: 13px;
+  line-height: 1.75;
+}
+
+.about-title {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+}
+
+.about-name {
+  font-family: var(--display);
+  font-weight: 800;
+  font-size: 20px;
+}
+
+.about-version {
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.about-notice {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px 14px;
+  border-radius: var(--radius-m);
+  background: var(--surface-sunk);
+}
+
+.about-credits ul {
+  list-style: none;
+  margin: 4px 0 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 16px;
+}

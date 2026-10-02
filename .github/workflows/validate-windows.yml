@@ -1,0 +1,163 @@
+# Windows 検証ワークフロー
+# Layer A (renderer-only) 再実行から Release 互換 build・Layer B 最小起動確認までの
+# 最終gate。実 credential/session を要求しない。
+#
+# 注意: tauri-plugin-wdio / wdio capability / withGlobalTauri / test-only surface を
+# 通常 Release に混入させないこと。test-only の設定は wdio.conf.ts / tests/ui 内に
+# 閉じ込め、tauri.conf.json の capabilities に持ち込まない。
+name: Validate Windows (QA scaffold)
+
+# Rust の test/clippy は cfg(windows) のため、Windows 側の PR ゲートはここが正本。
+# ホストランナーのみを使い、secrets は参照しない (フォークPRでも安全に実行できる構成を保つ)。
+on:
+  workflow_dispatch:
+  pull_request:
+    paths-ignore:
+      - "docs/**"
+      - "README.md"
+  push:
+    branches: [main]
+    paths-ignore:
+      - "docs/**"
+      - "README.md"
+
+# 最小権限原則: 読み取りのみ
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name != 'workflow_dispatch' }}
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
+jobs:
+  validate-windows:
+    runs-on: windows-latest
+    timeout-minutes: 30
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+    # 一時作業ディレクトリ: 検証成果物はここに集め、最後に消す
+    - name: Prepare temp workdir
+      run: |
+        $workdir = Join-Path $env:RUNNER_TEMP "validate"
+        New-Item -ItemType Directory -Force -Path $workdir | Out-Null
+        Write-Output "workdir=$workdir" >> $env:GITHUB_ENV
+        "ref=$env:GITHUB_REF" | Out-File (Join-Path $workdir "validation-summary.txt")
+      shell: pwsh
+
+    - name: Setup Node.js
+      uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+      with:
+        node-version: '24'
+        cache: npm
+
+    - name: Setup Rust
+      uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable action code
+      with:
+        toolchain: stable
+        targets: x86_64-pc-windows-msvc
+        components: rustfmt, clippy
+
+    # ホストランナーは使い捨てのため、Cargoの依存とビルド成果物はActionsキャッシュで再利用する。
+    - name: Cache Rust build
+      uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+      with:
+        workspaces: src-tauri -> target
+
+    - name: Install dependencies
+      run: npm ci
+
+    # 1. Rust 検証 (fmt / clippy / test)
+    - name: Rust fmt
+      working-directory: src-tauri
+      run: cargo fmt -- --check
+
+    - name: Clippy
+      working-directory: src-tauri
+      run: cargo clippy --all-targets --all-features --locked -- -D warnings
+
+    - name: Rust tests
+      working-directory: src-tauri
+      run: cargo test --lib --locked
+
+    # 2. frontend build
+    - name: Frontend build
+      run: npm run build
+
+    # 2b. UI typecheck (tests/ui + wdio.conf.ts を tsc --noEmit。transpileOnly実行は残す)
+    - name: UI typecheck
+      run: npm run test:ui:typecheck
+
+    # 3. Layer A 再実行 (Rust 不要・invoke mock。スイート/設定は `npm run test:ui` と同一)。
+    # start-server-and-testは終了時にwmicへ依存し、wmic不在のランナーで落ちるため、
+    # Windowsでは開発サーバーの起動・後始末を明示する (taskkillは標準搭載)。
+    # ランナー同梱Chromeとnpmのchromedriverの版ずれを避けるため、版の揃った組を取得して使う。
+    - name: Layer A UI tests
+      env:
+        WDIO_FORCE_BROWSER_DOWNLOAD: '1'
+      run: |
+        $vite = Start-Process -FilePath 'npm.cmd' -ArgumentList 'run','dev' -PassThru -WindowStyle Hidden
+        $wdioExit = 0
+        try {
+          $ready = $false
+          for ($i = 0; $i -lt 60; $i++) {
+            try {
+              if ((Invoke-WebRequest -Uri 'http://localhost:1420' -UseBasicParsing -TimeoutSec 2).StatusCode -eq 200) { $ready = $true; break }
+            } catch {}
+            Start-Sleep -Seconds 2
+          }
+          if (-not $ready) { throw 'dev server not ready' }
+          npx wdio run ./wdio.conf.ts
+          $wdioExit = $LASTEXITCODE
+        } finally {
+          taskkill /PID $vite.Id /T /F 2>$null
+        }
+        exit $wdioExit
+      shell: pwsh
+
+    # 4. 版一元性: リリースと同じ検証コマンドで検査する (YAMLへ重複実装しない)
+    - name: Check version unity
+      run: |
+        node scripts/verify-version.mjs | Tee-Object -Variable verifyOut
+        $verifyOut | Out-File $env:workdir/validation-summary.txt -Append
+      shell: pwsh
+
+    # 5. リリース互換ビルド (配布物は作らない)
+    - name: Release-compatible build
+      run: npm run tauri build -- --no-bundle
+
+    # 6. Layer Bのネイティブスモークテストはここでは実施しない。
+    # Layer Bの正本は native-e2e.yml の hosted-uia-smoke（正確な実行ファイルを検査する）。
+    # smoke-native.ps1 自体は残す（手動・ホスト環境での利用のため）。
+
+    # 7. 配布物検査 (Layer Bの環境起因失敗と独立に実測する)
+    # 実装は scripts/package-release.ps1 が正本 (ZIP命名/stage/sha形式の重複実装禁止)。
+    # 版名は `Check version unity` (verify-version.mjs) の出力 ($env:stem/$env:zip/$env:sha) をそのまま使う。
+    - name: Package and hash check
+      if: always()
+      run: |
+        $summary = Join-Path $env:workdir "validation-summary.txt"
+        ./scripts/package-release.ps1 -Stem $env:stem -Zip $env:zip -Sha $env:sha -OutDir $env:workdir -Summary $summary
+      shell: pwsh
+
+    # PR（フォーク含む）でも動くため、実行ファイルは保存しない。検証要約だけを残す。
+    - name: Upload validation summary
+      if: always()
+      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      with:
+        name: windows-validation-summary
+        path: |
+          ${{ env.workdir }}/validation-summary.txt
+        retention-days: 1
+        if-no-files-found: warn
+    # 後始末: 一時作業ディレクトリを消す
+    - name: Cleanup temp workdir
+      if: always()
+      run: Remove-Item -Recurse -Force $env:workdir -ErrorAction SilentlyContinue
+      shell: pwsh

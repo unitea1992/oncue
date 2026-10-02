@@ -1,0 +1,154 @@
+/* ログイン・二要素認証 */
+.login {
+  min-height: 100vh;
+  display: flex;
+  background: var(--surface);
+}
+
+.login-stage {
+  width: 42%;
+  max-width: 380px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  padding: 40px 34px 28px;
+  background: var(--stage);
+  color: var(--stage-ink);
+}
+
+.login-brand {
+  font-size: 44px;
+  gap: 12px;
+  margin: 0;
+}
+
+.login-mark {
+  width: 40px;
+  height: 40px;
+  flex-shrink: 0;
+}
+
+.login-tagline {
+  font-size: 15px;
+  line-height: 1.8;
+}
+
+.login-notice {
+  margin-top: auto;
+  padding-top: 14px;
+  border-top: 1px solid var(--stage-line);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: 12px;
+  line-height: 1.7;
+  color: var(--stage-muted);
+}
+
+.login-notice strong {
+  color: var(--stage-ink);
+}
+
+.login-panel {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  padding: 32px 48px;
+}
+
+.login-form {
+  width: 100%;
+  max-width: 400px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.login-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.login-title {
+  font-size: 18px;
+}
+
+.login-lead {
+  color: var(--muted);
+}
+
+.password-row {
+  display: flex;
+  gap: 6px;
+}
+
+.password-row input {
+  flex: 1;
+  min-width: 0;
+}
+
+.password-row button {
+  min-height: 40px;
+  width: 40px;
+}
+
+.check-hint {
+  display: block;
+  margin-top: 2px;
+}
+
+.code-input {
+  min-height: 52px;
+  font-size: 30px;
+  font-weight: 700;
+  letter-spacing: 0.3em;
+  text-align: center;
+}
+
+.login-form .segmented {
+  align-self: flex-start;
+}
+
+/* 狭い画面（拡大表示を含む）: ブランド → 入力欄 → 注意書き の順に縦へ並べる */
+@media (max-width: 640px) {
+  .login {
+    flex-direction: column;
+    background: var(--stage);
+  }
+
+  .login-stage {
+    display: contents;
+  }
+
+  .login-brand {
+    order: 0;
+    padding: 16px 20px 12px;
+    font-size: 28px;
+    color: var(--stage-ink);
+  }
+
+  .login-mark {
+    width: 26px;
+    height: 26px;
+  }
+
+  .login-tagline {
+    display: none;
+  }
+
+  .login-panel {
+    order: 1;
+    padding: 20px;
+    background: var(--surface);
+  }
+
+  .login-notice {
+    order: 2;
+    margin: 0;
+    padding: 16px 20px 20px;
+    border-top: none;
+  }
+}

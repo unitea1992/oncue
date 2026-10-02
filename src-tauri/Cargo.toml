@@ -1,0 +1,118 @@
+[package]
+name = "oncue"
+version = "0.2.0-rc.3"
+description = "OnCue - auto-join VRChat group events at start time (unofficial)"
+authors = ["Unitea"]
+license = "MIT"
+repository = "https://github.com/unitea1992/oncue"
+edition = "2021"
+rust-version = "1.88"
+
+[lib]
+name = "oncue_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+tauri-plugin-opener = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", features = ["full"] }
+reqwest = { version = "0.13", default-features = false, features = ["json", "cookies", "native-tls", "charset", "http2", "system-proxy"] }
+thiserror = "1"
+chrono = { version = "0.4", features = ["serde"] }
+uuid = { version = "1", features = ["v4", "serde"] }
+base64 = "0.22"
+windows = { version = "0.52", features = ["Win32_Security_Cryptography", "Win32_System_Threading", "Win32_System_ProcessStatus", "Win32_Foundation"] }
+sha2 = "0.10"
+tokio-tungstenite = { version = "0.21", features = ["native-tls"] }
+url = "2"
+http = "1"
+futures = "0.3"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+urlencoding = "2.1.3"
+unicode-normalization = "0.1"
+
+# VRChat API SDK
+vrchatapi = "1.20"
+
+[dev-dependencies]
+# モック生成
+mockall = "0.12"
+
+# 非同期テスト
+tokio-test = "0.4"
+
+# パラメータ化テスト
+rstest = "0.18"
+
+# テストアサーション強化
+pretty_assertions = "1.4"
+
+# 一時ファイル・ディレクトリ管理
+tempfile = "3.10"
+
+# ==============================================================================
+# ビルドプロファイル設定
+# ==============================================================================
+
+# -----------------------------------------------------------------------------
+# 開発ビルド（dev）
+# -----------------------------------------------------------------------------
+# 目的: デバッグと開発時の高速ビルド
+# 注意: Windows cdylibのDLLエクスポート制限(65535)を回避するため
+#       軽度の最適化が必要
+[profile.dev]
+# 最適化レベル1: Windows DLL制限回避のため最低限必要
+# opt-level = 0 ではシンボル数が多すぎてリンクエラー
+opt-level = 1
+# デバッグ情報を全て保持
+debug = true
+# デバッグアサーション有効（開発時の安全性）
+debug-assertions = true
+# オーバーフローチェック無効（シンボル削減）
+overflow-checks = false
+# LTO無効（ビルド速度向上）
+lto = false
+# 並列コード生成単位を増やしてビルド速度向上
+codegen-units = 16
+# パニック時はアンワインド（デバッグ情報保持）
+panic = "unwind"
+# インクリメンタルコンパイル有効（ビルド速度向上）
+incremental = true
+
+# 依存クレートも最適化（シンボル削減のため）
+[profile.dev.package."*"]
+opt-level = 2
+
+# -----------------------------------------------------------------------------
+# リリースビルド（release）
+# -----------------------------------------------------------------------------
+# 目的: 本番環境での最高性能と最小サイズ
+# トレードオフ: ビルド時間は長くなるが実行性能を最大化
+[profile.release]
+# 最適化レベル3: 最大最適化
+opt-level = 3
+# デバッグ情報は最小限のみ（リリース後のデバッグ用）
+debug = false
+# デバッグアサーション無効（パフォーマンス向上）
+debug-assertions = false
+# オーバーフローチェック無効（パフォーマンス向上）
+overflow-checks = false
+# Thin LTO: ビルド時間と最適化のバランス
+lto = "thin"
+# 単一コード生成単位で最大最適化
+# 注意: Tauriアプリの場合、シンボル数が多いためcodegen-units=1は慎重に
+codegen-units = 1
+# パニック時は即時終了（バイナリサイズ削減）
+panic = "abort"
+# インクリメンタルコンパイル無効（完全最適化）
+incremental = false
+# シンボル削除でバイナリサイズ削減
+# 注意: cdylibの場合、公開シンボルは保持される
+strip = true
+

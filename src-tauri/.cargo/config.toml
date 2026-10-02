@@ -1,0 +1,5 @@
+# ローカルとCIで同一の静的CRTリンクにする。
+# CI(.github/workflows/build-portable.yml)はこの設定を正本とし、
+# 追加のRUSTFLAGSを付けない。
+[target.x86_64-pc-windows-msvc]
+rustflags = ["-C", "target-feature=+crt-static"]

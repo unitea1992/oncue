@@ -1,0 +1,158 @@
+# Native E2E (hosted, Layer B) — hosted-uia-smoke 単独運用。
+# 正確なリリース実行ファイルを成果物から取得して検査する。再ビルドはしない。
+#
+# 採用理由: hosted-uia-smoke が3回中3回成功、所要約10秒、ドライバー一式が不要のため単独採用。
+# 実機証拠: official WebDriver 3敗 (DevToolsActivePort、同一artifact)、
+# hosted-uia-smoke 3勝 (同一artifact)。
+# 方針:
+# - runs-on: windows-latest (ホスト)。セルフホストは使わない。
+# - 配布物は Build Portable の成果物 (版由来 oncue-*-x64) をそのまま使い、
+#   SHA256 照合後に実行ファイルを取り出す。`cargo build` / `tauri build` は実行しない。
+# - 成果物の由来情報: workflow_run 由来のビルド実行番号を解決し、
+#   ZIPのSHA256を同梱の.sha256と照合して正確さを確保する。
+# - 作業ディレクトリの事前掃除や実行後の掃除は持たない
+#   （ホストランナーは使い捨てのため。別の所有者が用意した後始末の仕組みと重複させない）。
+# 再訪条件: tauri-driver 側の release-build attach 改善・WebView2 protocol 対応が
+# 確認できたら、tauri-service + wdio + e2e-native 構成で再検証する。
+#
+# 注記 (workflow_run のマージ前制約):
+# workflow_run は既定ブランチ上の本ワークフロー定義で発火する。
+# 本ファイルが既定ブランチにマージされる前のブランチでは自動発火しないため、
+# マージ前の手動検証は workflow_dispatch + artifact_run_id を使うこと。
+#
+# 由来情報の束縛・対応表:
+# | path              | BUILD_RUN_ID 正本                                    | BUILD_HEAD_SHA 正本                                  | checkout ref              |
+# |-------------------|------------------------------------------------------|------------------------------------------------------|---------------------------|
+# | workflow_run      | github.event.workflow_run.id (実API形の正本)         | github.event.workflow_run.head_sha (正本)            | head_sha と同一のチェックアウト |
+# | workflow_dispatch | inputs.artifact_run_id → Runs API の id と突合       | Runs API run.head_sha (workflow/conclusion assert後) | head_sha と同一のチェックアウト |
+# いずれの経路も「選択したブランチのチェックアウト」は信用せず、確定した正確なSHA
+# のみをチェックアウトの参照先へ結び付ける。開始時に
+# BUILD_RUN_ID / BUILD_HEAD_SHA / CHECKOUT_SHA を出力し、不一致なら失敗させる。
+name: Native E2E (hosted, Layer B)
+
+on:
+  workflow_run:
+    workflows: ['Build Portable Windows App']
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      artifact_run_id:
+        description: 'Build-Portable run id holding the oncue-*-x64 artifact (manual runs only)'
+        required: false
+        default: ''
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.run_id }}
+  cancel-in-progress: false
+
+jobs:
+  hosted-uia-smoke:
+    # workflow_run はワークフロー名で発火するため、フォークPRに同名ワークフローを置かれても
+    # 起動しないよう、このリポジトリの push / 手動実行で成功したビルドだけを対象にする。
+    if: >-
+      ${{ github.event_name == 'workflow_dispatch' || (
+        github.event.workflow_run.conclusion == 'success' &&
+        github.event.workflow_run.head_repository.full_name == github.repository &&
+        (github.event.workflow_run.event == 'push' || github.event.workflow_run.event == 'workflow_dispatch')
+      ) }}
+    runs-on: windows-latest
+    timeout-minutes: 10
+
+    steps:
+    - name: Resolve build provenance
+      id: provenance
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        EVENT_NAME: ${{ github.event_name }}
+        WORKFLOW_RUN_ID: ${{ github.event.workflow_run.id }}
+        WORKFLOW_RUN_SHA: ${{ github.event.workflow_run.head_sha }}
+        WORKFLOW_RUN_BRANCH: ${{ github.event.workflow_run.head_branch }}
+        DISPATCH_RUN_ID: ${{ inputs.artifact_run_id }}
+        REPO: ${{ github.repository }}
+      run: |
+        if ($env:EVENT_NAME -eq 'workflow_run') {
+          $runId = $env:WORKFLOW_RUN_ID
+          if (-not $runId) { throw 'PROVENANCE_MISSING: workflow_run.id is empty' }
+        } else {
+          $runId = $env:DISPATCH_RUN_ID
+          if (-not $runId) { throw 'ARTIFACT_RUN_ID_MISSING: manual runs need artifact_run_id' }
+        }
+        # どちらの経路も Runs API で実行元を照会し、ワークフロー名ではなくファイルパス・
+        # 起動イベント・実行元リポジトリで、このリポジトリの正規ビルドであることを確かめる。
+        $headers = @{
+          Authorization = "Bearer $($env:GH_TOKEN)"
+          Accept = 'application/vnd.github+json'
+        }
+        $run = Invoke-RestMethod -Uri "https://api.github.com/repos/$($env:REPO)/actions/runs/$runId" -Headers $headers
+        if ($run.path -ne '.github/workflows/build-portable.yml') { throw "PROVENANCE_WORKFLOW_MISMATCH: got '$($run.path)'" }
+        if ($run.event -notin @('push', 'workflow_dispatch')) { throw "PROVENANCE_EVENT_REJECTED: got '$($run.event)'" }
+        if ($run.head_repository.full_name -ne $env:REPO) { throw "PROVENANCE_REPOSITORY_MISMATCH: got '$($run.head_repository.full_name)'" }
+        if ($run.conclusion -ne 'success') { throw "PROVENANCE_CONCLUSION_NOT_SUCCESS: got '$($run.conclusion)'" }
+        $sha = $run.head_sha
+        $branch = $run.head_branch
+        if (-not $sha) { throw 'PROVENANCE_MISSING: runs API head_sha is empty' }
+        if ($env:EVENT_NAME -eq 'workflow_run' -and $sha -ne $env:WORKFLOW_RUN_SHA) { throw "PROVENANCE_SHA_MISMATCH: api=$sha event=$($env:WORKFLOW_RUN_SHA)" }
+        "build_run_id=$runId" >> $env:GITHUB_OUTPUT
+        "build_head_sha=$sha" >> $env:GITHUB_OUTPUT
+        "build_branch=$branch" >> $env:GITHUB_OUTPUT
+        "# Provenance`n`n- SOURCE_RUN_ID: $runId`n- SOURCE_SHA: $sha`n- SOURCE_BRANCH: $branch`n" >> $env:GITHUB_STEP_SUMMARY
+      shell: pwsh
+
+    - name: Checkout exact build SHA
+      uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      with:
+        ref: ${{ steps.provenance.outputs.build_head_sha }}
+
+    - name: Verify checkout binding
+      env:
+        BUILD_RUN_ID: ${{ steps.provenance.outputs.build_run_id }}
+        BUILD_HEAD_SHA: ${{ steps.provenance.outputs.build_head_sha }}
+      run: |
+        $checkout = (git rev-parse HEAD).Trim()
+        "BUILD_RUN_ID=$env:BUILD_RUN_ID"
+        "BUILD_HEAD_SHA=$env:BUILD_HEAD_SHA"
+        "CHECKOUT_SHA=$checkout"
+        "# Binding`n`n- BUILD_RUN_ID: $env:BUILD_RUN_ID`n- BUILD_HEAD_SHA: $env:BUILD_HEAD_SHA`n- CHECKOUT_SHA: $checkout`n" >> $env:GITHUB_STEP_SUMMARY
+        if ($checkout -ne $env:BUILD_HEAD_SHA) { throw "CHECKOUT_SHA_MISMATCH: checkout=$checkout expected=$env:BUILD_HEAD_SHA" }
+      shell: pwsh
+
+    - name: Download exact release artifact
+      uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.1
+      with:
+        pattern: oncue-*-x64
+        merge-multiple: true
+        path: ./.native-exe
+        run-id: ${{ steps.provenance.outputs.build_run_id }}
+        github-token: ${{ secrets.GITHUB_TOKEN }}
+
+    # 正確さの確保: SHA256照合→展開→実行ファイルの特定。ビルドコマンドは実行しない。
+    - name: Use exact release exe (no rebuild)
+      run: |
+        $zips = @(Get-ChildItem .\.native-exe\*.zip)
+        if ($zips.Count -ne 1) { throw "RELEASE_ZIP_NOT_UNIQUE:$($zips.Count)" }
+        $zip = $zips[0]
+        $shas = @(Get-ChildItem .\.native-exe\*.sha256)
+        if ($shas.Count -ne 1) { throw "RELEASE_HASH_NOT_UNIQUE:$($shas.Count)" }
+        $shaFile = $shas[0]
+        $expected = ((Get-Content $shaFile -Raw) -split '\s+')[0].ToLower()
+        $actual = (Get-FileHash $zip.FullName -Algorithm SHA256).Hash.ToLower()
+        if ($actual -ne $expected) { throw 'ARTIFACT_HASH_MISMATCH' }
+        $expanded = Join-Path (Get-Location) '.native-exe\expanded'
+        Expand-Archive -Path $zip.FullName -DestinationPath $expanded -Force
+        $exes = @(Get-ChildItem $expanded -Recurse -Filter oncue.exe)
+        if ($exes.Count -ne 1) { throw "RELEASE_EXE_NOT_UNIQUE:$($exes.Count)" }
+        $exe = $exes[0]
+        "APP_BINARY_PATH=$($exe.FullName)" >> $env:GITHUB_ENV
+      shell: pwsh
+
+    # Tabキー移動の実測のみ。資格情報の入力・ログイン送信はしない。
+    - name: Run UIA smoke (no credentials)
+      run: |
+        $exe = $env:APP_BINARY_PATH
+        if (-not $exe) { throw 'SMOKE_EXE_MISSING: APP_BINARY_PATH is empty' }
+        ./scripts/smoke-native.ps1 -ExePath $exe
+      shell: pwsh

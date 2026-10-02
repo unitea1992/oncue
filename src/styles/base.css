@@ -1,0 +1,569 @@
+/*
+ * OnCue の土台。舞台のキューライトをモチーフにする。
+ * - house: 劇場の幕の臙脂。ブランドと主ボタン
+ * - stage: 照明を落とした舞台。監視パネルとログイン左面
+ * - standby / go: 合図のランプ（琥珀=待機・監視中、緑=入室）
+ * テーマは <html data-theme="light|dark">。
+ */
+@font-face {
+  font-family: "Cue Display";
+  src: url("../assets/fonts/BigShoulders-subset.woff2") format("woff2");
+  font-weight: 100 900;
+  font-display: swap;
+}
+
+:root,
+[data-theme="light"] {
+  --floor: #edeff2;
+  --surface: #ffffff;
+  --surface-sunk: #f6f7f9;
+  --ink: #17181c;
+  --muted: #5a5f6b;
+  --line: #d5d9e0;
+  --line-strong: #a9afba;
+
+  --house: #8c1d40;
+  --house-hover: #731834;
+  --house-ink: #ffffff;
+  --house-text: #8c1d40;
+  --house-soft: #f6e8ed;
+
+  --stage: #1f1726;
+  --stage-raised: #2b2133;
+  --stage-ink: #f4eef6;
+  --stage-muted: #b9aec0;
+  --stage-line: #3b3044;
+
+  --standby: #f6b544;
+  --go: #3dd68c;
+  --standby-text: #8f5a00;
+  --go-text: #13804f;
+  --danger: #b4342a;
+  --danger-soft: #fbeceb;
+  --standby-soft: #fdf3e0;
+  --go-soft: #e4f6ec;
+
+  --focus: #8c1d40;
+  --shadow-dialog: 0 18px 48px rgba(31, 23, 38, 0.28);
+
+  color-scheme: light;
+}
+
+[data-theme="dark"] {
+  --floor: #1c1622;
+  --surface: #261e2d;
+  --surface-sunk: #211a27;
+  --ink: #f1ecf3;
+  --muted: #b3a9ba;
+  --line: #3b3044;
+  --line-strong: #5a4d66;
+
+  --house: #c2456c;
+  --house-hover: #d0587e;
+  --house-ink: #ffffff;
+  --house-text: #e5799b;
+  --house-soft: #3a2131;
+
+  --stage: #120d17;
+  --stage-raised: #1d1623;
+  --stage-ink: #f4eef6;
+  --stage-muted: #b9aec0;
+  --stage-line: #33293c;
+
+  --standby-text: #f6b544;
+  --go-text: #3dd68c;
+  --danger: #ff8a80;
+  --danger-soft: #3b1f22;
+  --standby-soft: #36291a;
+  --go-soft: #193126;
+
+  --focus: #e5799b;
+  --shadow-dialog: 0 18px 48px rgba(0, 0, 0, 0.55);
+
+  color-scheme: dark;
+}
+
+:root {
+  --font: "BIZ UDPGothic", "Yu Gothic UI", "Meiryo UI", "Hiragino Sans", "Noto Sans CJK JP", system-ui, sans-serif;
+  --display: "Cue Display", "Bahnschrift", "Arial Narrow", sans-serif;
+  --radius-s: 6px;
+  --radius-m: 8px;
+  --radius-l: 14px;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  font-size: 16px;
+}
+
+body {
+  margin: 0;
+  background: var(--floor);
+  color: var(--ink);
+  font-family: var(--font);
+  font-size: 14px;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+}
+
+h1,
+h2,
+h3 {
+  margin: 0;
+  line-height: 1.35;
+}
+
+p {
+  margin: 0;
+}
+
+a {
+  color: var(--house-text);
+  text-underline-offset: 3px;
+}
+
+/* 視覚的に隠すが支援技術には伝える */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* 時刻・数字の書体 */
+.num {
+  font-family: var(--display);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.01em;
+}
+
+/* ---------- Buttons ---------- */
+button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 36px;
+  padding: 0 14px;
+  border-radius: var(--radius-m);
+  border: 1px solid var(--line-strong);
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+button:hover:not(:disabled) {
+  background: var(--surface-sunk);
+}
+
+button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+button.primary {
+  background: var(--house);
+  border-color: var(--house);
+  color: var(--house-ink);
+}
+
+button.primary:hover:not(:disabled) {
+  background: var(--house-hover);
+  border-color: var(--house-hover);
+}
+
+button.large {
+  min-height: 44px;
+  padding: 0 22px;
+  font-size: 15px;
+}
+
+button.quiet {
+  background: transparent;
+  border-color: transparent;
+  color: var(--muted);
+}
+
+button.quiet:hover:not(:disabled) {
+  background: var(--surface-sunk);
+  color: var(--ink);
+}
+
+button.icon {
+  width: 34px;
+  min-height: 34px;
+  padding: 0;
+}
+
+button.danger-text {
+  color: var(--danger);
+}
+
+button.danger-solid {
+  background: var(--danger);
+  border-color: var(--danger);
+  color: var(--surface);
+}
+
+button.link {
+  min-height: 0;
+  padding: 2px 0;
+  border: none;
+  background: none;
+  color: var(--muted);
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+button.link:hover:not(:disabled) {
+  background: none;
+  color: var(--ink);
+}
+
+/* ---------- Forms ---------- */
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.field-label {
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.field-label .optional {
+  margin-left: 6px;
+  font-weight: 400;
+  color: var(--muted);
+}
+
+input,
+select,
+textarea {
+  min-height: 40px;
+  padding: 0 12px;
+  font: inherit;
+  color: var(--ink);
+  background: var(--surface);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-m);
+}
+
+textarea {
+  padding: 8px 12px;
+}
+
+input[type="checkbox"],
+input[type="radio"] {
+  min-height: 0;
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  accent-color: var(--house);
+}
+
+input::placeholder {
+  color: var(--muted);
+  opacity: 0.85;
+}
+
+input[aria-invalid="true"],
+select[aria-invalid="true"] {
+  border-color: var(--danger);
+}
+
+.hint {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.error-message {
+  color: var(--danger);
+  font-size: 13px;
+  margin: 0;
+  /* バックエンドの案内文は改行で区切ることがあるため、改行をそのまま表示する */
+  white-space: pre-line;
+}
+
+.check {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  cursor: pointer;
+}
+
+.check input {
+  margin-top: 2px;
+}
+
+/* セグメント（排他選択）。中身は button[aria-pressed] か label>input[type=radio] */
+.segmented {
+  display: inline-flex;
+  flex-wrap: wrap;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-m);
+  overflow: hidden;
+  background: var(--surface);
+}
+
+.segmented > button,
+.segmented > label {
+  min-height: 34px;
+  padding: 0 14px;
+  border: none;
+  border-left: 1px solid var(--line);
+  border-radius: 0;
+  background: transparent;
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  cursor: pointer;
+  position: relative;
+}
+
+.segmented > :first-child {
+  border-left: none;
+}
+
+.segmented > button[aria-pressed="true"],
+.segmented > label:has(input:checked) {
+  background: var(--ink);
+  color: var(--surface);
+}
+
+.segmented > label input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.segmented > label:has(input:disabled) {
+  cursor: not-allowed;
+}
+
+/* スイッチ */
+.switch[role="switch"] {
+  position: relative;
+  flex-shrink: 0;
+  width: 42px;
+  min-height: 24px;
+  height: 24px;
+  padding: 0;
+  border-radius: 999px;
+  border: 1px solid var(--line-strong);
+  background: var(--line);
+}
+
+.switch[role="switch"]::after {
+  content: "";
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--surface);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
+  transition: left 0.15s ease;
+}
+
+.switch[role="switch"][aria-checked="true"] {
+  background: var(--house);
+  border-color: var(--house);
+}
+
+.switch[role="switch"][aria-checked="true"]::after {
+  left: 21px;
+}
+
+/* ---------- Notices ---------- */
+.callout {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 14px;
+  border-left: 4px solid var(--line-strong);
+  border-radius: 0 var(--radius-m) var(--radius-m) 0;
+  background: var(--surface);
+  font-size: 13px;
+}
+
+.callout > svg {
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.callout-body {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+  flex: 1;
+}
+
+.callout-body strong {
+  font-weight: 700;
+}
+
+.callout-body button {
+  align-self: flex-start;
+}
+
+.callout.warning {
+  border-left-color: var(--standby);
+  background: var(--standby-soft);
+}
+
+.callout.warning > svg,
+.callout.warning strong {
+  color: var(--standby-text);
+}
+
+.callout.error {
+  border-left-color: var(--danger);
+  background: var(--danger-soft);
+}
+
+.callout.error > svg,
+.callout.error strong {
+  color: var(--danger);
+}
+
+.callout.success {
+  border-left-color: var(--go);
+  background: var(--go-soft);
+}
+
+.callout.success > svg,
+.callout.success strong {
+  color: var(--go-text);
+}
+
+/* ---------- Dialog ---------- */
+.native-dialog {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-l);
+  background: var(--surface);
+  color: var(--ink);
+  padding: 0;
+  width: min(560px, calc(100vw - 32px));
+  max-height: calc(100vh - 40px);
+  overflow: auto;
+  box-shadow: var(--shadow-dialog);
+}
+
+.native-dialog::backdrop {
+  background: rgba(18, 13, 23, 0.55);
+}
+
+.dialog-title {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  padding: 18px 22px 12px;
+  background: var(--surface);
+  font-size: 17px;
+}
+
+.dialog-body {
+  padding: 0 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.dialog-message {
+  padding: 0 22px;
+  white-space: pre-line;
+}
+
+.dialog-footer {
+  position: sticky;
+  bottom: 0;
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 20px;
+  padding: 14px 22px;
+  background: var(--surface);
+  border-top: 1px solid var(--line);
+}
+
+/* ---------- Boot ---------- */
+.boot {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  background: var(--stage);
+}
+
+.boot-lamp {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--standby);
+  box-shadow: 0 0 20px 6px rgba(246, 181, 68, 0.4);
+  animation: lamp-breathe 1.6s ease-in-out infinite;
+}
+
+@keyframes lamp-breathe {
+  0%,
+  100% {
+    opacity: 0.45;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* ---------- Focus ---------- */
+:focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: 2px;
+}
+
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline-offset: 0;
+  border-color: var(--focus);
+}
+
+.segmented > label:has(input:focus-visible) {
+  outline: 3px solid var(--focus);
+  outline-offset: -3px;
+  z-index: 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
