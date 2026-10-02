@@ -30,7 +30,7 @@ VRChatのグループイベントを対象にした非公式ツールです。�
 
 ビルドは Windows 10/11 で行います。
 
-- [Rust](https://rustup.rs/)（stable。最低バージョンは 1.88）
+- [Rust](https://rustup.rs/)（stable。最低バージョンは 1.90）
 - [Node.js](https://nodejs.org/) 22 以上
 - Visual Studio Build Tools の「C++ によるデスクトップ開発」ワークロード
 - WebView2 Runtime（Windows 10/11 には通常入っています）
