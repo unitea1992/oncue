@@ -4,7 +4,9 @@ use crate::domain::models::{
 };
 use crate::logging::{LogEvent, LogLevel, LogWriter};
 use crate::services::join_service::JoinService;
-use crate::services::vrchat_api::{candidates_from_detailed, VrchatApiService};
+use crate::services::vrchat_api::{
+    candidates_from_detailed, redact_location_tag, VrchatApiService,
+};
 use crate::services::websocket_service::QueueKind;
 use crate::services::{
     base_poll_interval_secs, jittered_poll_interval_secs, resolve_monitor_window, WebsocketService,
@@ -14,7 +16,7 @@ use crate::services::{
 };
 use crate::storage::Preset;
 use chrono::{DateTime, Datelike, Duration, FixedOffset, Timelike, Utc};
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use tokio::sync::{Mutex, RwLock};
 use tokio::task::JoinHandle;
@@ -45,6 +47,10 @@ struct RunContext {
     notified_selection: bool,
     /// 会場は見えているが待機している理由を最後に通常ログへ出した文。同じ内容は繰り返さない。
     last_wait_note: Option<String>,
+    /// 一覧で名前が空だった会場を、詳細から取り直した結果。会場ごとに1回だけ取得する。
+    looked_up_names: HashMap<String, Option<String>>,
+    /// 応答のフィールド名をデバッグログへ出したか。1実行に1回だけ出す。
+    logged_instance_keys: bool,
 }
 
 /// 選択IPCと監視ループで共有するrun-local状態。pinは恒久preferredへ保存しない。
@@ -483,6 +489,8 @@ impl MonitorService {
             extensions_used: 0,
             notified_selection: false,
             last_wait_note: None,
+            looked_up_names: HashMap::new(),
+            logged_instance_keys: false,
         };
         lifecycle.task = Some(tokio::spawn(async move {
             let end = runner.monitor_main(ctx).await;
@@ -765,7 +773,16 @@ impl MonitorService {
 
         ctx.transient_errors = 0;
         ctx.rate_limit_hits = 0;
-        let candidates = candidates_from_detailed(&response.instances);
+        if ctx.debug_mode && !ctx.logged_instance_keys && !response.instance_keys.is_empty() {
+            self.log_debug(&format!(
+                "会場一覧のフィールド: {}",
+                response.instance_keys.join(",")
+            ))
+            .await;
+            ctx.logged_instance_keys = true;
+        }
+        let mut candidates = candidates_from_detailed(&response.instances);
+        self.fill_missing_names(ctx, &mut candidates).await;
         ctx.last_poll_had_candidates = !candidates.is_empty();
         ctx.last_poll_all_full =
             !candidates.is_empty() && candidates.iter().all(|c| c.is_full_now());
@@ -848,6 +865,43 @@ impl MonitorService {
                 self.set_candidates(generation, Vec::new()).await;
                 ctx.notified_selection = false;
                 self.launch_candidate(ctx, candidate).await
+            }
+        }
+    }
+
+    /// 一覧で名前が空の会場は、詳細を1回だけ取得して名前を補う。失敗しても監視は続ける。
+    async fn fill_missing_names(&self, ctx: &mut RunContext, candidates: &mut [Candidate]) {
+        for candidate in candidates.iter_mut() {
+            if candidate.display_name.is_some() {
+                continue;
+            }
+            if !ctx.looked_up_names.contains_key(&candidate.location) {
+                let found = match self
+                    .vrchat_api
+                    .get_instance_name(&candidate.world_id, &candidate.instance_id)
+                    .await
+                {
+                    Ok(probe) => {
+                        self.log_info(&format!(
+                            "一覧に名前がない会場の詳細を取得しました（{}）: displayName={:?}, name={:?}",
+                            redact_location_tag(&candidate.location),
+                            probe.display_name,
+                            probe.name
+                        ))
+                        .await;
+                        probe.display_name.filter(|name| !name.trim().is_empty())
+                    }
+                    Err(e) => {
+                        self.log_debug(&format!("会場の詳細を取得できませんでした: {}", e))
+                            .await;
+                        None
+                    }
+                };
+                ctx.looked_up_names
+                    .insert(candidate.location.clone(), found);
+            }
+            if let Some(Some(name)) = ctx.looked_up_names.get(&candidate.location) {
+                candidate.display_name = Some(name.clone());
             }
         }
     }
