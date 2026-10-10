@@ -56,6 +56,7 @@ impl AppState {
 
         let vrchat_api = Arc::new(VrchatApiService::new(http_client.clone()));
         // 書込不可配置でも起動を止めない。診断はpreflightのlogFileWritableで通知する。
+        storage_paths.prune_old_logs();
         let log_writer = Arc::new(Mutex::new(LogWriter::new(storage_paths.log_file())));
 
         let join_service = Arc::new(JoinService::new());
