@@ -183,7 +183,7 @@ export function canCandidateQueue(candidate: Candidate): boolean {
   );
 }
 
-/** `get_monitor_status` の応答。`candidates` は選択待ち中の現在一覧、`generation` は現在の実行の世代。 */
+/** `get_monitor_status` の応答。`candidates` は選択待ち中、または会場が見えているのに待機している間の現在一覧、`generation` は現在の実行の世代。 */
 export interface MonitorSnapshot {
   state: MonitorState;
   stopReason?: StopReason | null;

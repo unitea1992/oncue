@@ -122,9 +122,11 @@ export interface CueInput {
   expired: boolean;
   /** この回は止めたなどの理由で、自動では始めない */
   skipAuto: boolean;
+  /** 監視中に会場は見えているが、条件に合わないなどで待っている */
+  seenCandidates?: boolean;
 }
 
-export function describeCue({ state, stopReason, pendingTarget, monitorStart, expired, skipAuto }: CueInput): CueView {
+export function describeCue({ state, stopReason, pendingTarget, monitorStart, expired, skipAuto, seenCandidates }: CueInput): CueView {
   const reason = stopReason ?? (state && typeof state === 'object' ? state.Stopped : null);
 
   if (!state || state === 'Idle' || typeof state === 'object') {
@@ -182,7 +184,9 @@ export function describeCue({ state, stopReason, pendingTarget, monitorStart, ex
         step: 1,
         tone: 'neutral',
         title: '監視しています',
-        detail: '会場が開くのを待っています。\nこのままお待ちください。',
+        detail: seenCandidates
+          ? '条件に合う会場を待っています。\n下の一覧から選んで入ることもできます。'
+          : '会場が開くのを待っています。\nこのままお待ちください。',
       };
     case 'AwaitingInstanceSelection':
       return {

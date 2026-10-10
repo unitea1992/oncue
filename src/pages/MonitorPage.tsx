@@ -368,7 +368,10 @@ export function MonitorPage({ onOpenEvents }: MonitorPageProps) {
     eventStart: cueWindow?.eventStart ?? null,
     expired,
     skipAuto: !!upcomingWindow && isOccurrenceHandled(selectedPreset.id, upcomingWindow.eventStart.toISOString()),
+    seenCandidates: monitoringSelected && candidates.length > 0,
   });
+  // 会場は見えているが条件に合わず待っている間も、一覧から手動で選べるようにする
+  const showChooser = view.phase === 'choose' || (view.phase === 'watching' && candidates.length > 0);
   const active = isPhaseActive(view.phase);
   const otherRunning = running && !monitoringSelected;
   const visibleLogs = logs.filter((log) => config?.debugMode || log.level !== 'debug');
@@ -398,7 +401,7 @@ export function MonitorPage({ onOpenEvents }: MonitorPageProps) {
         compact={view.phase === 'choose'}
       />
 
-      {view.phase === 'choose' && (
+      {showChooser && (
         <CandidateChooser
           candidates={candidates}
           calendarEventId={selectedPreset.schedule.kind === 'once' ? selectedPreset.sourceEventId ?? null : null}

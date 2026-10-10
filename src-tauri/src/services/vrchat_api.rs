@@ -46,6 +46,31 @@ impl VrchatApiService {
     ) -> Result<UserGroupInstancesResponse, AppError> {
         ensure_path_segment(group_id)?;
         let endpoint = format!("/users/{}/instances/groups/{}", user_id, group_id);
+        let raw: serde_json::Value = self.get_json(&endpoint).await?;
+        let instance_keys = instance_field_names(&raw);
+        let mut response: UserGroupInstancesResponse =
+            serde_json::from_value(raw).map_err(AppError::from)?;
+        response.instance_keys = instance_keys;
+        Ok(response)
+    }
+
+    /// 1会場の詳細から名前だけを取る。一覧で名前が空の会場を補うために使う。
+    pub async fn get_instance_name(
+        &self,
+        world_id: &str,
+        instance_id: &str,
+    ) -> Result<InstanceNameProbe, AppError> {
+        if world_id.is_empty() || instance_id.is_empty() {
+            return Err(AppError::InvalidInput(
+                "会場のIDが空のため詳細を取得できません".to_string(),
+            ));
+        }
+        ensure_path_segment(world_id)?;
+        let endpoint = format!(
+            "/instances/{}:{}",
+            urlencoding::encode(world_id),
+            urlencoding::encode(instance_id)
+        );
         self.get_json(&endpoint).await
     }
 
@@ -188,6 +213,36 @@ pub struct UserGroupInstancesResponse {
     pub fetched_at: Option<DateTime<Utc>>,
     #[serde(default)]
     pub instances: Vec<DetailedInstance>,
+    /// 応答の各会場が持つフィールド名（値は含めない）。名前の所在を調べる診断用。
+    #[serde(skip)]
+    pub instance_keys: Vec<String>,
+}
+
+/// 応答の各会場が持つフィールド名の和集合。値は読まない。
+fn instance_field_names(raw: &serde_json::Value) -> Vec<String> {
+    let mut keys: Vec<String> = raw
+        .get("instances")
+        .and_then(|v| v.as_array())
+        .into_iter()
+        .flatten()
+        .filter_map(|i| i.as_object())
+        .flat_map(|o| o.keys().cloned())
+        .collect();
+    keys.sort();
+    keys.dedup();
+    keys
+}
+
+/// `/instances/{worldId}:{instanceId}` の名前部分だけ。ほかのフィールドは読まない。
+#[derive(Debug, Clone, Default, Deserialize)]
+pub struct InstanceNameProbe {
+    #[serde(rename = "displayName", default)]
+    pub display_name: Option<String>,
+    #[serde(default)]
+    pub name: Option<String>,
+    /// 会場の説明文。名前が空のとき、主催者が名前をここへ書いていないか確かめる診断用。
+    #[serde(default)]
+    pub description: Option<String>,
 }
 
 /// group-specific user instancesの1件分。SDK 1.20.9のInstanceと同一shape。
@@ -236,7 +291,17 @@ impl DetailedInstance {
             } else {
                 self.world_id.clone()
             },
-            display_name: self.display_name.clone(),
+            // 空文字は名前なしとして扱う（名前条件の判定を誤らせない）。
+            // 名前なしは監視側で詳細から取り直し、それでも空ならワールド名で代える。
+            display_name: self
+                .display_name
+                .clone()
+                .filter(|name| !name.trim().is_empty()),
+            world_name: self
+                .world
+                .as_ref()
+                .map(|w| w.name.clone())
+                .filter(|name| !name.trim().is_empty()),
             member_count: self.user_count,
             has_capacity_for_you: self.has_capacity_for_you,
             is_full: Some(self.full),
@@ -639,6 +704,75 @@ mod tests {
         assert_eq!(candidate.is_full, Some(false));
         assert!(candidate.is_joinable());
         assert_eq!(candidates_from_detailed(&[instance]).len(), 1);
+    }
+
+    #[test]
+    fn blank_display_name_becomes_none_and_keys_are_listed() {
+        let raw = serde_json::json!({
+            "instances": [{
+                "id": "inst_1",
+                "instanceId": "1~group(grp_test)",
+                "location": "wrld_test:1~group(grp_test)",
+                "worldId": "wrld_test",
+                "displayName": "",
+                "full": false,
+                "userCount": 1
+            }, {
+                "id": "inst_2",
+                "instanceId": "2~group(grp_test)",
+                "location": "wrld_test:2~group(grp_test)",
+                "worldId": "wrld_test",
+                "displayName": null,
+                "full": true,
+                "userCount": 40,
+                "extra": 1
+            }]
+        });
+        let keys = instance_field_names(&raw);
+        assert!(keys.contains(&"extra".to_string()));
+        assert_eq!(keys.iter().filter(|k| *k == "displayName").count(), 1);
+        let response: UserGroupInstancesResponse = serde_json::from_value(raw).unwrap();
+        let candidates = candidates_from_detailed(&response.instances);
+        assert!(candidates.iter().all(|c| c.display_name.is_none()));
+    }
+
+    #[test]
+    fn world_name_is_kept_apart_from_display_name() {
+        let instance = |display_name: serde_json::Value| -> DetailedInstance {
+            serde_json::from_value(serde_json::json!({
+                "id": "inst_1",
+                "instanceId": "1~group(grp_test)",
+                "location": "wrld_test:1~group(grp_test)",
+                "worldId": "wrld_test",
+                "world": {
+                    "id": "wrld_test",
+                    "name": "Event_第2インスタンス",
+                    "capacity": 40,
+                    "recommendedCapacity": 32
+                },
+                "displayName": display_name,
+                "full": false,
+                "userCount": 1
+            }))
+            .unwrap()
+        };
+        // 会場名が空でも、ここではワールド名を会場名へ混ぜない（詳細の取り直しを先に行うため）。
+        let unnamed = instance(serde_json::json!("")).to_candidate();
+        assert_eq!(unnamed.display_name, None);
+        assert_eq!(unnamed.world_name.as_deref(), Some("Event_第2インスタンス"));
+        assert_eq!(
+            instance(serde_json::Value::Null)
+                .to_candidate()
+                .display_name,
+            None
+        );
+        assert_eq!(
+            instance(serde_json::json!("Test Event"))
+                .to_candidate()
+                .display_name
+                .as_deref(),
+            Some("Test Event")
+        );
     }
 
     #[test]
