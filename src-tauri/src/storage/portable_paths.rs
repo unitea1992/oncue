@@ -13,9 +13,22 @@ pub enum StorageError {
     Serialization(String),
 }
 
+/// 残す起動ログの数。古いものから消す。
+const MAX_LOG_FILES: usize = 20;
+
 #[derive(Debug, Clone)]
 pub struct PortablePaths {
     base_dir: PathBuf,
+    /// この起動で書くログのファイル名。起動ごとに1つ作り、実行中は変えない。
+    log_file_name: String,
+}
+
+/// 起動時刻を名前に含めたログファイル名。名前順が古い順になる。
+fn launch_log_file_name() -> String {
+    format!(
+        "oncue_{}.jsonl",
+        chrono::Local::now().format("%Y%m%d_%H%M%S")
+    )
 }
 
 impl PortablePaths {
@@ -32,19 +45,26 @@ impl PortablePaths {
             })?
             .to_path_buf();
 
-        Ok(Self { base_dir })
+        Ok(Self {
+            base_dir,
+            log_file_name: launch_log_file_name(),
+        })
     }
 
     /// カスタムベースディレクトリでインスタンスを作成（テスト用）
     pub fn with_base_dir(base_dir: &std::path::Path) -> Self {
         Self {
             base_dir: base_dir.to_path_buf(),
+            log_file_name: launch_log_file_name(),
         }
     }
 
     #[cfg(test)]
     pub fn with_base(base_dir: PathBuf) -> Self {
-        Self { base_dir }
+        Self {
+            base_dir,
+            log_file_name: launch_log_file_name(),
+        }
     }
 
     pub fn verify_writable(&self) -> Result<(), StorageError> {
@@ -94,10 +114,30 @@ impl PortablePaths {
         self.data_dir().join("config.json")
     }
 
+    /// この起動のログファイル。起動ごとに別のファイルにし、共有するときに前の起動の記録が混ざらないようにする。
     pub fn log_file(&self) -> PathBuf {
-        let now = chrono::Local::now();
-        let filename = format!("oncue_{}.jsonl", now.format("%Y%m%d"));
-        self.logs_dir().join(filename)
+        self.logs_dir().join(&self.log_file_name)
+    }
+
+    /// 古いログを消し、新しい順に `MAX_LOG_FILES` 件だけ残す。消せなくても起動は続ける。
+    pub fn prune_old_logs(&self) {
+        let Ok(entries) = std::fs::read_dir(self.logs_dir()) else {
+            return;
+        };
+        let mut logs: Vec<PathBuf> = entries
+            .filter_map(|entry| entry.ok().map(|e| e.path()))
+            .filter(|path| {
+                path.file_name()
+                    .and_then(|name| name.to_str())
+                    .is_some_and(|name| name.starts_with("oncue_") && name.ends_with(".jsonl"))
+            })
+            .collect();
+        // 日付だけの旧形式（oncue_YYYYMMDD.jsonl）も、名前順で同じ日の起動ログより前に並ぶ。
+        logs.sort();
+        let excess = logs.len().saturating_sub(MAX_LOG_FILES);
+        for path in logs.into_iter().take(excess) {
+            let _ = std::fs::remove_file(path);
+        }
     }
 
     pub fn cache_file(&self, name: &str) -> PathBuf {
@@ -114,6 +154,26 @@ mod tests {
         let temp_dir = TempDir::new().unwrap();
         let paths = PortablePaths::with_base(temp_dir.path().to_path_buf());
         (paths, temp_dir)
+    }
+
+    #[test]
+    fn log_file_is_fixed_per_launch_and_old_logs_are_pruned() {
+        let (paths, _temp) = create_test_paths();
+        assert_eq!(paths.log_file(), paths.clone().log_file());
+        let logs_dir = paths.logs_dir();
+        std::fs::write(logs_dir.join("oncue_20260101.jsonl"), "").unwrap();
+        for i in 0..MAX_LOG_FILES {
+            std::fs::write(
+                logs_dir.join(format!("oncue_20260102_0000{:02}.jsonl", i)),
+                "",
+            )
+            .unwrap();
+        }
+        std::fs::write(logs_dir.join("other.txt"), "").unwrap();
+        paths.prune_old_logs();
+        assert!(!logs_dir.join("oncue_20260101.jsonl").exists());
+        assert!(logs_dir.join("oncue_20260102_000000.jsonl").exists());
+        assert!(logs_dir.join("other.txt").exists());
     }
 
     #[test]
