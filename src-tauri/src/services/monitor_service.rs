@@ -47,8 +47,8 @@ struct RunContext {
     notified_selection: bool,
     /// 会場は見えているが待機している理由を最後に通常ログへ出した文。同じ内容は繰り返さない。
     last_wait_note: Option<String>,
-    /// 一覧で名前が空だった会場を、詳細から取り直した結果。会場ごとに1回だけ取得する。
-    looked_up_names: HashMap<String, Option<String>>,
+    /// 一覧で名前が空だった会場を、詳細から取り直した結果。名前が取れるまで間隔を空けて数回だけ取り直す。
+    looked_up_names: HashMap<String, NameLookup>,
     /// 応答のフィールド名をデバッグログへ出したか。1実行に1回だけ出す。
     logged_instance_keys: bool,
 }
@@ -193,6 +193,25 @@ fn describe_seen_candidates(candidates: &[Candidate]) -> String {
         })
         .collect::<Vec<_>>()
         .join("、")
+}
+
+/// 名前を詳細から取り直す上限回数と間隔。会場の名前が後から付く場合に備えつつ、問い合わせを増やしすぎない。
+const NAME_LOOKUP_MAX_ATTEMPTS: u32 = 5;
+const NAME_LOOKUP_RETRY_SECS: u64 = 60;
+
+/// 会場1件分の名前取り直しの記録。
+struct NameLookup {
+    name: Option<String>,
+    attempts: u32,
+    last_attempt: std::time::Instant,
+}
+
+impl NameLookup {
+    fn due(&self) -> bool {
+        self.name.is_none()
+            && self.attempts < NAME_LOOKUP_MAX_ATTEMPTS
+            && self.last_attempt.elapsed().as_secs() >= NAME_LOOKUP_RETRY_SECS
+    }
 }
 
 /// 確認tickの観測結果。判定順序（一致→移動中→queue→切断→継続）を一箇所に固定する。
@@ -875,7 +894,9 @@ impl MonitorService {
             if candidate.display_name.is_some() {
                 continue;
             }
-            if !ctx.looked_up_names.contains_key(&candidate.location) {
+            let previous = ctx.looked_up_names.get(&candidate.location);
+            if previous.is_none_or(NameLookup::due) {
+                let attempts = previous.map_or(0, |p| p.attempts) + 1;
                 let found = match self
                     .vrchat_api
                     .get_instance_name(&candidate.world_id, &candidate.instance_id)
@@ -883,8 +904,9 @@ impl MonitorService {
                 {
                     Ok(probe) => {
                         self.log_info(&format!(
-                            "一覧に名前がない会場の詳細を取得しました（{}）: displayName={:?}, name={:?}, description={:?}",
+                            "一覧に名前がない会場の詳細を取得しました（{}、{}回目）: displayName={:?}, name={:?}, description={:?}",
                             redact_location_tag(&candidate.location),
+                            attempts,
                             probe.display_name,
                             probe.name,
                             probe.description
@@ -898,11 +920,21 @@ impl MonitorService {
                         None
                     }
                 };
-                ctx.looked_up_names
-                    .insert(candidate.location.clone(), found);
+                ctx.looked_up_names.insert(
+                    candidate.location.clone(),
+                    NameLookup {
+                        name: found,
+                        attempts,
+                        last_attempt: std::time::Instant::now(),
+                    },
+                );
             }
-            if let Some(Some(name)) = ctx.looked_up_names.get(&candidate.location) {
-                candidate.display_name = Some(name.clone());
+            if let Some(name) = ctx
+                .looked_up_names
+                .get(&candidate.location)
+                .and_then(|lookup| lookup.name.clone())
+            {
+                candidate.display_name = Some(name);
             }
         }
     }
@@ -1410,6 +1442,21 @@ mod tests {
         assert!(revalidate_pin(&[], "loc-a").is_err());
         let full = vec![pin_candidate("loc-a", false)];
         assert!(revalidate_pin(&full, "loc-a").is_err());
+    }
+
+    #[test]
+    fn name_lookup_retries_only_while_unnamed_and_below_cap() {
+        let old =
+            std::time::Instant::now() - std::time::Duration::from_secs(NAME_LOOKUP_RETRY_SECS);
+        let lookup = |name: Option<&str>, attempts, last_attempt| NameLookup {
+            name: name.map(str::to_string),
+            attempts,
+            last_attempt,
+        };
+        assert!(lookup(None, 1, old).due());
+        assert!(!lookup(None, 1, std::time::Instant::now()).due());
+        assert!(!lookup(None, NAME_LOOKUP_MAX_ATTEMPTS, old).due());
+        assert!(!lookup(Some("第2"), 1, old).due());
     }
 
     #[test]
