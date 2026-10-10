@@ -12,7 +12,7 @@
     "build": "tsc && vite build",
     "preview": "vite preview",
     "tauri": "tauri",
-    "test": "tsc src/lib/schedule.ts --target es2020 --module esnext --moduleResolution bundler --skipLibCheck --declaration false --sourceMap false --outDir node_modules/.schedule-test && node --test src/lib/schedule.test.mjs",
+    "test": "tsc --ignoreConfig src/lib/schedule.ts --target es2020 --module esnext --moduleResolution bundler --skipLibCheck --declaration false --sourceMap false --outDir node_modules/.schedule-test && node --test src/lib/schedule.test.mjs",
     "test:version": "node --test scripts/verify-version.test.mjs",
     "test:rust": "cd src-tauri && cargo test",
     "test:rust:verbose": "cd src-tauri && cargo test -- --nocapture",
@@ -45,7 +45,7 @@
     "chromedriver": "^152.0.0",
     "start-server-and-test": "^2",
     "ts-node": "^10",
-    "typescript": "~5.9.3",
+    "typescript": "^7.0.2",
     "vite": "^8.3.1"
   },
   "allowScripts": {
