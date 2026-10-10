@@ -291,14 +291,16 @@ impl DetailedInstance {
             } else {
                 self.world_id.clone()
             },
-            // 会場名が空ならワールド名で代える。会場ごとに別ワールドを立てる運用では
-            // ワールド名が会場の見分けになる。同じワールドなら名前が重なり、自動では選ばない。
             // 空文字は名前なしとして扱う（名前条件の判定を誤らせない）。
+            // 名前なしは監視側で詳細から取り直し、それでも空ならワールド名で代える。
             display_name: self
                 .display_name
                 .clone()
-                .filter(|name| !name.trim().is_empty())
-                .or_else(|| self.world.as_ref().map(|w| w.name.clone()))
+                .filter(|name| !name.trim().is_empty()),
+            world_name: self
+                .world
+                .as_ref()
+                .map(|w| w.name.clone())
                 .filter(|name| !name.trim().is_empty()),
             member_count: self.user_count,
             has_capacity_for_you: self.has_capacity_for_you,
@@ -735,7 +737,7 @@ mod tests {
     }
 
     #[test]
-    fn missing_display_name_falls_back_to_world_name() {
+    fn world_name_is_kept_apart_from_display_name() {
         let instance = |display_name: serde_json::Value| -> DetailedInstance {
             serde_json::from_value(serde_json::json!({
                 "id": "inst_1",
@@ -754,19 +756,15 @@ mod tests {
             }))
             .unwrap()
         };
+        // 会場名が空でも、ここではワールド名を会場名へ混ぜない（詳細の取り直しを先に行うため）。
+        let unnamed = instance(serde_json::json!("")).to_candidate();
+        assert_eq!(unnamed.display_name, None);
+        assert_eq!(unnamed.world_name.as_deref(), Some("Event_第2インスタンス"));
         assert_eq!(
             instance(serde_json::Value::Null)
                 .to_candidate()
-                .display_name
-                .as_deref(),
-            Some("Event_第2インスタンス")
-        );
-        assert_eq!(
-            instance(serde_json::json!(""))
-                .to_candidate()
-                .display_name
-                .as_deref(),
-            Some("Event_第2インスタンス")
+                .display_name,
+            None
         );
         assert_eq!(
             instance(serde_json::json!("Test Event"))

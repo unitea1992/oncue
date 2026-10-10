@@ -929,13 +929,13 @@ impl MonitorService {
                     },
                 );
             }
-            if let Some(name) = ctx
+            // 詳細でも名前が取れなければ、ワールド名で代える。会場ごとに別ワールドを立てる
+            // 運用ではワールド名が会場の見分けになる。同じワールドなら名前が重なり、自動では選ばない。
+            candidate.display_name = ctx
                 .looked_up_names
                 .get(&candidate.location)
                 .and_then(|lookup| lookup.name.clone())
-            {
-                candidate.display_name = Some(name);
-            }
+                .or_else(|| candidate.world_name.clone());
         }
     }
 
@@ -1422,6 +1422,7 @@ mod tests {
             instance_id: "inst~id".to_string(),
             world_id: "wrld_test".to_string(),
             display_name: Some(location.to_string()),
+            world_name: None,
             member_count: 10,
             has_capacity_for_you: Some(joinable),
             is_full: Some(!joinable),

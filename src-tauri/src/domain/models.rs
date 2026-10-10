@@ -310,6 +310,9 @@ pub struct Candidate {
     pub instance_id: String,
     pub world_id: String,
     pub display_name: Option<String>,
+    /// ワールド名。会場名が詳細から取り直しても空のときだけ、名前の照合に使う。
+    #[serde(default)]
+    pub world_name: Option<String>,
     pub member_count: i32,
     pub has_capacity_for_you: Option<bool>,
     pub is_full: Option<bool>,
@@ -485,6 +488,7 @@ mod tests {
             instance_id: "test~id".to_string(),
             world_id: "wrld_123".to_string(),
             display_name,
+            world_name: None,
             member_count: 10,
             has_capacity_for_you: has_capacity,
             is_full,
@@ -500,6 +504,7 @@ mod tests {
             instance_id: format!("{}~id", location),
             world_id: "wrld_123".to_string(),
             display_name: Some(location.to_string()),
+            world_name: None,
             member_count: 10,
             has_capacity_for_you: Some(true),
             is_full: Some(false),
