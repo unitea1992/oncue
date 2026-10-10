@@ -43,6 +43,8 @@ struct RunContext {
     /// 延長した回数。上限で打ち切る。
     extensions_used: u32,
     notified_selection: bool,
+    /// 会場は見えているが待機している理由を最後に通常ログへ出した文。同じ内容は繰り返さない。
+    last_wait_note: Option<String>,
 }
 
 /// 選択IPCと監視ループで共有するrun-local状態。pinは恒久preferredへ保存しない。
@@ -161,6 +163,30 @@ fn format_poll_debug(
         matched,
         selection.status_key(),
     )
+}
+
+/// 見えている会場の名前と状態の一覧。人数は毎回変わるため含めない（同じ内容の重複出力を避ける）。
+fn describe_seen_candidates(candidates: &[Candidate]) -> String {
+    candidates
+        .iter()
+        .map(|c| {
+            let state = if c.is_joinable() {
+                "空きあり"
+            } else if c.can_queue() {
+                "満員・キューあり"
+            } else if c.is_full_now() {
+                "満員"
+            } else {
+                "状態不明"
+            };
+            format!(
+                "{}（{}）",
+                c.display_name.as_deref().unwrap_or("名前なし"),
+                state
+            )
+        })
+        .collect::<Vec<_>>()
+        .join("、")
 }
 
 /// 確認tickの観測結果。判定順序（一致→移動中→queue→切断→継続）を一箇所に固定する。
@@ -329,7 +355,7 @@ impl MonitorService {
         true
     }
 
-    /// 現在候補一覧の更新。選択待ち以外では空にする。旧世代・停止済みなら何もしない。
+    /// 現在候補一覧の更新。選択待ちと、会場が見えているのに待機している間だけ中身を持つ。旧世代・停止済みなら何もしない。
     async fn set_candidates(&self, generation: u64, candidates: Vec<Candidate>) -> bool {
         let lifecycle = self.lifecycle.lock().await;
         if lifecycle.generation != generation {
@@ -456,6 +482,7 @@ impl MonitorService {
             last_poll_had_candidates: false,
             extensions_used: 0,
             notified_selection: false,
+            last_wait_note: None,
         };
         lifecycle.task = Some(tokio::spawn(async move {
             let end = runner.monitor_main(ctx).await;
@@ -777,15 +804,32 @@ impl MonitorService {
             .await;
         }
         match selection {
+            // 会場が見えているのに待つ理由は通常ログへ出し、一覧も画面へ渡して手動で選べるようにする。
             CandidateSelection::Waiting(message) | CandidateSelection::Unverifiable(message) => {
-                self.set_candidates(generation, Vec::new()).await;
                 ctx.notified_selection = false;
-                self.log_debug(&message).await;
+                if candidates.is_empty() {
+                    ctx.last_wait_note = None;
+                    self.log_debug(&message).await;
+                } else {
+                    let note = format!(
+                        "{} 見えている会場: {}",
+                        message,
+                        describe_seen_candidates(&candidates)
+                    );
+                    if ctx.last_wait_note.as_deref() != Some(note.as_str()) {
+                        self.log_info(&note).await;
+                        ctx.last_wait_note = Some(note);
+                    } else {
+                        self.log_debug(&message).await;
+                    }
+                }
+                self.set_candidates(generation, candidates).await;
                 PollAction::Waiting
             }
             // 複数候補は非終端の選択待ちへ。窓内は通常間隔で更新し、
             // 選択IPCでpinして再開する。5秒固定pollへの張り付きはしない。
             CandidateSelection::Ambiguous(message) => {
+                ctx.last_wait_note = None;
                 self.set_candidates(generation, candidates).await;
                 if self
                     .set_phase(generation, MonitorState::AwaitingInstanceSelection)
@@ -1311,6 +1355,20 @@ mod tests {
         assert!(revalidate_pin(&[], "loc-a").is_err());
         let full = vec![pin_candidate("loc-a", false)];
         assert!(revalidate_pin(&full, "loc-a").is_err());
+    }
+
+    #[test]
+    fn seen_candidates_list_names_and_states_without_counts() {
+        let mut nameless = pin_candidate("loc-c", true);
+        nameless.display_name = None;
+        let line = describe_seen_candidates(&[
+            pin_candidate("HookahHolic_第1インスタンス", false),
+            nameless,
+        ]);
+        assert_eq!(
+            line,
+            "HookahHolic_第1インスタンス（満員）、名前なし（空きあり）"
+        );
     }
 
     #[test]
