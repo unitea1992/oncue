@@ -516,9 +516,9 @@ mod tests {
             (Some("Japanese Event"), "JAPANESE", true),
             (Some("Night Session"), "day", false),
             (None, "test", false),
-            (Some("HookahHolic_第1インスタンス"), "第1", true),
-            (Some("HookahHolic_第１インスタンス"), "第1", true),
-            (Some("HookahHolic_第1インスタンス"), "第１", true),
+            (Some("Event_第1インスタンス"), "第1", true),
+            (Some("Event_第１インスタンス"), "第1", true),
+            (Some("Event_第1インスタンス"), "第１", true),
             (Some("Ｍａｉｎ Event"), "main", true),
             (Some("ホロライブ"), "ﾎﾛﾗｲﾌﾞ", true),
         ];

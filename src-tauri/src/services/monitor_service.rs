@@ -1361,14 +1361,9 @@ mod tests {
     fn seen_candidates_list_names_and_states_without_counts() {
         let mut nameless = pin_candidate("loc-c", true);
         nameless.display_name = None;
-        let line = describe_seen_candidates(&[
-            pin_candidate("HookahHolic_第1インスタンス", false),
-            nameless,
-        ]);
-        assert_eq!(
-            line,
-            "HookahHolic_第1インスタンス（満員）、名前なし（空きあり）"
-        );
+        let line =
+            describe_seen_candidates(&[pin_candidate("Event_第1インスタンス", false), nameless]);
+        assert_eq!(line, "Event_第1インスタンス（満員）、名前なし（空きあり）");
     }
 
     #[test]
