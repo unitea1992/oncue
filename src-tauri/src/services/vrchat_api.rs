@@ -240,6 +240,9 @@ pub struct InstanceNameProbe {
     pub display_name: Option<String>,
     #[serde(default)]
     pub name: Option<String>,
+    /// 会場の説明文。名前が空のとき、主催者が名前をここへ書いていないか確かめる診断用。
+    #[serde(default)]
+    pub description: Option<String>,
 }
 
 /// group-specific user instancesの1件分。SDK 1.20.9のInstanceと同一shape。

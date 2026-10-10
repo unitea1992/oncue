@@ -883,10 +883,11 @@ impl MonitorService {
                 {
                     Ok(probe) => {
                         self.log_info(&format!(
-                            "一覧に名前がない会場の詳細を取得しました（{}）: displayName={:?}, name={:?}",
+                            "一覧に名前がない会場の詳細を取得しました（{}）: displayName={:?}, name={:?}, description={:?}",
                             redact_location_tag(&candidate.location),
                             probe.display_name,
-                            probe.name
+                            probe.name,
+                            probe.description
                         ))
                         .await;
                         probe.display_name.filter(|name| !name.trim().is_empty())
