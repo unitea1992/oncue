@@ -44,7 +44,6 @@
     "@wdio/tauri-service": "^1",
     "chromedriver": "^152.0.0",
     "start-server-and-test": "^2",
-    "ts-node": "^10",
     "typescript": "^7.0.2",
     "vite": "^8.3.1"
   },
