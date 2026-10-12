@@ -4946,9 +4946,9 @@ checksum = "0b928f33d975fc6ad9f86c8f283853ad26bdd5b10b7f1542aa2fa15e2289105a"
 
 [[package]]
 name = "vrchatapi"
-version = "1.21.0"
+version = "1.22.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8f2269163f63e6645c5d5ec724d1ca60a2b084e20c146ef8f7731de88329316c"
+checksum = "9240d341cfef94aa67cf408fb5c365dad3bee2741d6e84ab4e4ac4d907bb07b9"
 dependencies = [
  "chrono",
  "log",
