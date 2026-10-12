@@ -30,7 +30,7 @@
     "react-dom": "^19.3.0"
   },
   "devDependencies": {
-    "@puppeteer/browsers": "^3.2.3",
+    "@puppeteer/browsers": "^3.2.4",
     "@tauri-apps/cli": "^2",
     "@types/mocha": "^10",
     "@types/react": "^19.3.0",
