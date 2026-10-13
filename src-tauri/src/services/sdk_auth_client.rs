@@ -319,9 +319,7 @@ impl SdkAuthClient {
         let result = authentication_api::get_current_user(&attempt).await;
 
         match result {
-            Ok(vrchatapi::models::RegisterUserAccount200Response::RequiresTwoFactorAuth(
-                pending,
-            )) => {
+            Ok(vrchatapi::models::CurrentUserLoginResponse::RequiresTwoFactorAuth(pending)) => {
                 // 検証呼び出しはCookieJarの保留Cookieで行う。平文資格情報は
                 // 稼働中の設定へ書き戻さず、このスナップショットと共に捨てる。
                 info!("2FAが必要です");
@@ -330,7 +328,7 @@ impl SdkAuthClient {
                     methods: normalize_sdk_methods(&pending.requires_two_factor_auth),
                 })
             }
-            Ok(vrchatapi::models::RegisterUserAccount200Response::CurrentUser(user)) => {
+            Ok(vrchatapi::models::CurrentUserLoginResponse::CurrentUser(user)) => {
                 info!("ログイン成功: {}", user.display_name);
                 let current = self
                     .finish_authenticated_user(user, remember_session)
@@ -389,11 +387,11 @@ impl SdkAuthClient {
             .map_err(|e| self.convert_sdk_error(e))?;
 
         match user_result {
-            vrchatapi::models::RegisterUserAccount200Response::CurrentUser(user) => {
+            vrchatapi::models::CurrentUserLoginResponse::CurrentUser(user) => {
                 info!("2FAフロー完了: {}", user.display_name);
                 self.finish_authenticated_user(user, remember_session).await
             }
-            vrchatapi::models::RegisterUserAccount200Response::RequiresTwoFactorAuth(_) => Err(
+            vrchatapi::models::CurrentUserLoginResponse::RequiresTwoFactorAuth(_) => Err(
                 AppError::Auth("予期しない認証状態です。再度ログインしてください。".to_string()),
             ),
         }
@@ -494,14 +492,12 @@ impl SdkAuthClient {
 
         let snapshot = self.config.lock().await.clone();
         match authentication_api::get_current_user(&snapshot).await {
-            Ok(vrchatapi::models::RegisterUserAccount200Response::CurrentUser(user)) => {
+            Ok(vrchatapi::models::CurrentUserLoginResponse::CurrentUser(user)) => {
                 let current = CurrentUser::from(user);
                 *self.cached_user.lock().await = Some(current.clone());
                 Ok(Some(current))
             }
-            Ok(vrchatapi::models::RegisterUserAccount200Response::RequiresTwoFactorAuth(_)) => {
-                Ok(None)
-            }
+            Ok(vrchatapi::models::CurrentUserLoginResponse::RequiresTwoFactorAuth(_)) => Ok(None),
             Err(e) => Err(self.convert_sdk_error(e)),
         }
     }
@@ -585,9 +581,9 @@ impl From<vrchatapi::models::CurrentUser> for CurrentUser {
             two_factor_auth_enabled: user.two_factor_auth_enabled,
             profile_icon_url,
             presence: user.presence.map(|p| crate::infra::http_client::Presence {
-                world: p.world.unwrap_or_default(),
+                world: p.world.flatten().unwrap_or_default(),
                 instance: p.instance.flatten().unwrap_or_default(),
-                traveling_to_world: p.traveling_to_world,
+                traveling_to_world: p.traveling_to_world.flatten(),
                 traveling_to_instance: p.traveling_to_instance.flatten(),
             }),
         }
