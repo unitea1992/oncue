@@ -74,6 +74,25 @@ impl VrchatApiService {
         self.get_json(&endpoint).await
     }
 
+    /// 手動の確認・参加用。名前が空の会場だけ、詳細を1回取得して名前を補い、
+    /// 取れなければワールド名で代える。監視（取り直しを覚えておく）とは別に、1回で結論を出す。
+    /// 詳細の取得に失敗しても、その会場はワールド名（無ければ名前なし）のままにする。
+    pub async fn fill_missing_names_once(&self, candidates: &mut [Candidate]) {
+        for candidate in candidates.iter_mut() {
+            if candidate.display_name.is_some() {
+                continue;
+            }
+            let probed = match self
+                .get_instance_name(&candidate.world_id, &candidate.instance_id)
+                .await
+            {
+                Ok(probe) => probe.display_name,
+                Err(_) => None,
+            };
+            candidate.display_name = name_or_world_name(probed, candidate.world_name.as_deref());
+        }
+    }
+
     /// 秘密を含めない診断用の試し取得。1GET + カレンダー取得を雛形エンドポイントの証跡にまとめる。
     /// 取得自体は通常認証で行い、出力に秘密を含めない。
     /// カレンダー取得失敗時は候補証跡を優先し、calendarAvailable=falseで返す。
@@ -310,6 +329,13 @@ impl DetailedInstance {
             calendar_entry_id: self.calendar_entry_id.clone(),
         }
     }
+}
+
+/// 詳細で取れた会場名を優先し、空ならワールド名で代える。どちらも空ならNone。
+fn name_or_world_name(probed: Option<String>, world_name: Option<&str>) -> Option<String> {
+    probed
+        .filter(|name| !name.trim().is_empty())
+        .or_else(|| world_name.map(str::to_string))
 }
 
 /// 1GET応答の一覧を候補へ写す。
@@ -773,6 +799,72 @@ mod tests {
                 .as_deref(),
             Some("Test Event")
         );
+    }
+
+    #[test]
+    fn name_or_world_name_prefers_probed_then_world() {
+        assert_eq!(
+            name_or_world_name(Some("Probed".into()), Some("World")).as_deref(),
+            Some("Probed")
+        );
+        assert_eq!(
+            name_or_world_name(Some("  ".into()), Some("World")).as_deref(),
+            Some("World")
+        );
+        assert_eq!(
+            name_or_world_name(None, Some("World")).as_deref(),
+            Some("World")
+        );
+        assert_eq!(name_or_world_name(None, None), None);
+    }
+
+    #[test]
+    fn unnamed_candidate_with_world_name_becomes_target_for_manual_check() {
+        let instance = |display_name: serde_json::Value| -> Candidate {
+            serde_json::from_value::<DetailedInstance>(serde_json::json!({
+                "id": "inst_1",
+                "instanceId": "1~group(grp_test)",
+                "location": "wrld_test:1~group(grp_test)",
+                "worldId": "wrld_test",
+                "world": {
+                    "id": "wrld_test",
+                    "name": "Test Event Hall",
+                    "capacity": 40,
+                    "recommendedCapacity": 32
+                },
+                "displayName": display_name,
+                "full": false,
+                "userCount": 1
+            }))
+            .unwrap()
+            .to_candidate()
+        };
+
+        // 名前なしのままでは、名前の条件を確認できない。
+        let unnamed = vec![instance(serde_json::Value::Null)];
+        assert!(matches!(
+            crate::domain::models::select_candidate(None, Some("event hall"), &unnamed),
+            crate::domain::models::CandidateSelection::Unverifiable(_)
+        ));
+
+        // 詳細でも空ならワールド名で代えるので、条件に一致して対象になる。
+        let mut filled = unnamed;
+        for c in filled.iter_mut() {
+            c.display_name = name_or_world_name(None, c.world_name.as_deref());
+        }
+        let selection = crate::domain::models::select_candidate(None, Some("event hall"), &filled);
+        assert_eq!(
+            selection.target().and_then(|c| c.display_name),
+            Some("Test Event Hall".to_string())
+        );
+
+        // 名前のある会場はそのまま。
+        let named = instance(serde_json::json!("Named Venue"));
+        assert_eq!(
+            name_or_world_name(None, named.world_name.as_deref()).as_deref(),
+            Some("Test Event Hall")
+        );
+        assert_eq!(named.display_name.as_deref(), Some("Named Venue"));
     }
 
     #[test]

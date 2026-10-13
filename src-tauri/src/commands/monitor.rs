@@ -285,7 +285,12 @@ pub async fn test_instance_check(
         .vrchat_api
         .get_group_instances_for_group(&current_user.id, &preset.group_id)
         .await?;
-    let candidates = candidates_from_detailed(&response.instances);
+    let mut candidates = candidates_from_detailed(&response.instances);
+    // 監視と同じく、名前が空の会場は詳細から補う。
+    state
+        .vrchat_api
+        .fill_missing_names_once(&mut candidates)
+        .await;
     let selection = select_action_candidate(&preset, &candidates);
     let target = selection.clone().target();
     let window = resolve_monitor_window(&preset.schedule, Utc::now()).ok_or_else(|| {
@@ -344,7 +349,12 @@ pub async fn run_preset_api_action(
         .vrchat_api
         .get_group_instances_for_group(&current_user.id, &preset.group_id)
         .await?;
-    let candidates = candidates_from_detailed(&response.instances);
+    let mut candidates = candidates_from_detailed(&response.instances);
+    // 監視と同じく、名前が空の会場は詳細から補う。
+    state
+        .vrchat_api
+        .fill_missing_names_once(&mut candidates)
+        .await;
     // 監視と共通の選択規則。曖昧な対象は手動でも起動しない。
     let candidate = match select_action_candidate(&preset, &candidates) {
         CandidateSelection::Target(candidate) => candidate,
