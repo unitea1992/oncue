@@ -338,12 +338,6 @@ pub async fn run_preset_api_action(
         ));
     }
 
-    if action == "selfInvite" && !crate::services::JoinService::check_vrchat_process() {
-        return Err(AppError::Operation(
-            "VRChatが起動していないため、セルフ招待の確認ができません。先にVRChatを起動してログイン状態にしてください。".to_string(),
-        ));
-    }
-
     // group-specific 1GET。旧2GET突合はしない。
     let response = state
         .vrchat_api

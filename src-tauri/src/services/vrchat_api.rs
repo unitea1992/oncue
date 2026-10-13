@@ -38,7 +38,7 @@ impl VrchatApiService {
     /// location/instanceId/worldId/world/displayName/full/hasCapacityForYou/
     /// queueEnabled/queueSize/userCount/capacity/calendarEntryIdを1応答で返すため、
     /// 旧2GET（group instances + user instances）のlocation突合は不要。
-    /// SDK 1.20.9の `get_user_group_instances_for_group` と同一エンドポイント。
+    /// SDK 1.22.1の `get_user_group_instances_for_group` と同一エンドポイント。
     pub async fn get_group_instances_for_group(
         &self,
         user_id: &str,
@@ -264,7 +264,7 @@ pub struct InstanceNameProbe {
     pub description: Option<String>,
 }
 
-/// group-specific user instancesの1件分。SDK 1.20.9のInstanceと同一shape。
+/// group-specific user instancesの1件分。SDK 1.22.1のInstanceと同一shape。
 /// full/queueは必須、表示・容量・calendarEntryIdは任意として受容する。
 #[derive(Debug, Clone, Deserialize)]
 pub struct DetailedInstance {
@@ -628,7 +628,7 @@ mod tests {
 
     #[test]
     fn deserialize_for_group_response_full_shape() {
-        // group-specific 1GETのshape。SDK 1.20.9のInstanceと同一項目。
+        // group-specific 1GETのshape。SDK 1.22.1のInstanceと同一項目。
         let json = serde_json::json!({
             "fetchedAt": "2025-03-30T12:00:00Z",
             "instances": [
