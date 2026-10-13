@@ -87,7 +87,7 @@ impl SessionCrypto {
                         .to_vec();
 
                 // SAFETY: LocalFreeはCryptProtectDataによって割り当てられたメモリを解放します
-                let _ = LocalFree(HLOCAL(data_blob_out.pbData as _));
+                let _ = LocalFree(Some(HLOCAL(data_blob_out.pbData as _)));
 
                 Ok(encrypted)
             }
@@ -144,7 +144,7 @@ impl SessionCrypto {
                         .to_vec();
 
                 // SAFETY: LocalFreeはCryptUnprotectDataによって割り当てられたメモリを解放します
-                let _ = LocalFree(HLOCAL(data_blob_out.pbData as _));
+                let _ = LocalFree(Some(HLOCAL(data_blob_out.pbData as _)));
 
                 Ok(decrypted)
             }
