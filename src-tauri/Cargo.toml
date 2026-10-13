@@ -22,7 +22,7 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 tokio = { version = "1", features = ["full"] }
 reqwest = { version = "0.13", default-features = false, features = ["json", "cookies", "native-tls", "charset", "http2", "system-proxy"] }
-thiserror = "1"
+thiserror = "2"
 chrono = { version = "0.4", features = ["serde"] }
 windows = { version = "0.52", features = ["Win32_Security_Cryptography", "Win32_System_Threading", "Win32_System_ProcessStatus", "Win32_Foundation"] }
 tokio-tungstenite = { version = "0.21", features = ["native-tls"] }
