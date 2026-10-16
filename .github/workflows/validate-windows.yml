@@ -69,6 +69,9 @@ jobs:
       uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
       with:
         workspaces: src-tauri -> target
+        # PR は main のキャッシュを復元するだけにし、時間のかかる保存を省く。
+        # main の push では保存して次の PR が使えるキャッシュを更新する。
+        save-if: ${{ github.ref == 'refs/heads/main' }}
 
     - name: Install dependencies
       run: npm ci
