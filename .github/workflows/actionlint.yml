@@ -27,14 +27,27 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - name: Download actionlint
+      # jactionlint is the actionlint fork that also reads the step keys
+      # background, wait-all and parallel. The correctness profile keeps the
+      # checks of actionlint. The release tarball is pinned by version and
+      # SHA-256 (the release's checksums file, with SLSA provenance of
+      # jdx/jactionlint's release workflow).
+      - name: Download jactionlint
+        env:
+          JACTIONLINT_VERSION: 2.2.0
+          JACTIONLINT_SHA256: 8137d5bfe266dd5e48d2af2306827785ce07c6988e04b1c3d6ad4776e97d27d2
         run: |
-          bash <(
-            curl -fsSL \
-              https://raw.githubusercontent.com/rhysd/actionlint/914e7df21a07ef503a81201c76d2b11c789d3fca/scripts/download-actionlint.bash
-          ) 1.7.12
+          dir="$RUNNER_TEMP/jactionlint"
+          mkdir -p "$dir"
+          curl -fsSL --retry 3 -o "$dir/jactionlint.tar.gz" \
+            "https://github.com/jdx/jactionlint/releases/download/v${JACTIONLINT_VERSION}/jactionlint_${JACTIONLINT_VERSION}_linux_amd64.tar.gz"
+          echo "${JACTIONLINT_SHA256}  $dir/jactionlint.tar.gz" | sha256sum -c -
+          tar -xzf "$dir/jactionlint.tar.gz" -C "$dir" jactionlint
+          "$dir/jactionlint" --version
         shell: bash
 
+      # --shellcheck=shellcheck fails the run when shellcheck is missing,
+      # instead of skipping the run: scripts silently.
       - name: Check workflow files
-        run: ./actionlint -color
+        run: '"$RUNNER_TEMP/jactionlint/jactionlint" --color=always --profile correctness --no-online --shellcheck=shellcheck'
         shell: bash
