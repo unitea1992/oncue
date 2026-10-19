@@ -1,20 +1,21 @@
-# Windows 検証ワークフロー
-# Layer A (renderer-only) 再実行から Release 互換 build・Layer B 最小起動確認までの
-# 最終gate。実 credential/session を要求しない。
+# Rust の検査。
+# src-tauri に cfg(windows) ゲートのコードがあるため、clippy / test は Windows で回す。
+# PR では Rust に関わる変更のときだけ clippy / test を回す (npm だけの更新では走らせない)。
+# リリース相当のビルドと ZIP の検査は main の push と手動実行だけで行う。
+# フロントエンドの型検査・テスト・Layer A・cargo fmt・版の整合は ci.yml が受け持つ。
 #
 # 注意: tauri-plugin-wdio / wdio capability / withGlobalTauri / test-only surface を
 # 通常 Release に混入させないこと。test-only の設定は wdio.conf.ts / tests/ui 内に
 # 閉じ込め、tauri.conf.json の capabilities に持ち込まない。
-name: Validate Windows (QA scaffold)
+name: "検査: Rust（Windows・MSRV）"
 
-# Rust の test/clippy は cfg(windows) のため、Windows 側の PR ゲートはここが正本。
 # ホストランナーのみを使い、secrets は参照しない (フォークPRでも安全に実行できる構成を保つ)。
 on:
   workflow_dispatch:
   pull_request:
-    paths-ignore:
-      - "docs/**"
-      - "README.md"
+    paths:
+      - "src-tauri/**"
+      - ".github/workflows/validate-windows.yml"
   push:
     branches: [main]
     paths-ignore:
@@ -34,7 +35,83 @@ env:
   RUST_BACKTRACE: 1
 
 jobs:
+  dependency-msrv:
+    name: 依存の MSRV
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable action code
+        with:
+          toolchain: stable
+
+      - name: Resolve Windows dependency metadata
+        run: >-
+          cargo metadata
+          --locked
+          --manifest-path src-tauri/Cargo.toml
+          --filter-platform x86_64-pc-windows-msvc
+          --format-version 1
+          > cargo-metadata.json
+
+      - name: Verify dependency MSRV does not exceed application MSRV
+        shell: python
+        run: |
+          import json
+          import sys
+
+          with open('cargo-metadata.json', encoding='utf-8') as f:
+              metadata = json.load(f)
+
+          root_id = metadata['resolve']['root']
+          packages = {package['id']: package for package in metadata['packages']}
+          active_ids = {node['id'] for node in metadata['resolve']['nodes']}
+          root = packages[root_id]
+          declared = root.get('rust_version')
+
+          if not declared:
+              print('Application rust-version is not declared.', file=sys.stderr)
+              sys.exit(1)
+
+          def version_tuple(value):
+              parts = value.split('-', 1)[0].split('.')
+              numeric = tuple(int(part) for part in parts)
+              return numeric + (0,) * (3 - len(numeric))
+
+          declared_tuple = version_tuple(declared)
+          dependencies = []
+          offenders = []
+
+          for package_id in active_ids:
+              if package_id == root_id:
+                  continue
+              package = packages[package_id]
+              rust_version = package.get('rust_version')
+              if not rust_version:
+                  continue
+              item = (version_tuple(rust_version), package['name'], package['version'], rust_version)
+              dependencies.append(item)
+              if item[0] > declared_tuple:
+                  offenders.append(item)
+
+          dependencies.sort(reverse=True)
+          print(f"Application MSRV: Rust {declared}")
+          if dependencies:
+              _, name, version, rust_version = dependencies[0]
+              print(f"Highest declared dependency MSRV: {name} {version} -> Rust {rust_version}")
+
+          if offenders:
+              print('Dependencies exceeding application MSRV:', file=sys.stderr)
+              for _, name, version, rust_version in sorted(offenders, reverse=True):
+                  print(f"- {name} {version}: Rust {rust_version}", file=sys.stderr)
+              sys.exit(1)
+
   validate-windows:
+    name: clippy・test（Windows）
     runs-on: windows-latest
     timeout-minutes: 30
 
@@ -42,27 +119,12 @@ jobs:
     - name: Checkout
       uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-    # 一時作業ディレクトリ: 検証成果物はここに集め、最後に消す
-    - name: Prepare temp workdir
-      run: |
-        $workdir = Join-Path $env:RUNNER_TEMP "validate"
-        New-Item -ItemType Directory -Force -Path $workdir | Out-Null
-        Write-Output "workdir=$workdir" >> $env:GITHUB_ENV
-        "ref=$env:GITHUB_REF" | Out-File (Join-Path $workdir "validation-summary.txt")
-      shell: pwsh
-
-    - name: Setup Node.js
-      uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
-      with:
-        node-version: '24'
-        cache: npm
-
     - name: Setup Rust
       uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable action code
       with:
         toolchain: stable
         targets: x86_64-pc-windows-msvc
-        components: rustfmt, clippy
+        components: clippy
 
     # ホストランナーは使い捨てのため、Cargoの依存とビルド成果物はActionsキャッシュで再利用する。
     - name: Cache Rust build
@@ -73,14 +135,6 @@ jobs:
         # main の push では保存して次の PR が使えるキャッシュを更新する。
         save-if: ${{ github.ref == 'refs/heads/main' }}
 
-    - name: Install dependencies
-      run: npm ci
-
-    # 1. Rust 検証 (fmt / clippy / test)
-    - name: Rust fmt
-      working-directory: src-tauri
-      run: cargo fmt -- --check
-
     - name: Clippy
       working-directory: src-tauri
       run: cargo clippy --all-targets --all-features --locked -- -D warnings
@@ -89,78 +143,44 @@ jobs:
       working-directory: src-tauri
       run: cargo test --lib --locked
 
-    # 2. frontend build
-    - name: Frontend build
-      run: npm run build
+    # ここから下は main の push と手動実行だけ (PR では時間がかかるため省く)。
+    - name: Setup Node.js
+      if: github.event_name != 'pull_request'
+      uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+      with:
+        node-version: '24'
+        cache: npm
 
-    # 2b. UI typecheck (tests/ui + wdio.conf.ts を tsc --noEmit。transpileOnly実行は残す)
-    - name: UI typecheck
-      run: npm run test:ui:typecheck
+    - name: Install dependencies
+      if: github.event_name != 'pull_request'
+      run: npm ci
 
-    # 3. Layer A 再実行 (Rust 不要・invoke mock。スイート/設定は `npm run test:ui` と同一)。
-    # start-server-and-testは終了時にwmicへ依存し、wmic不在のランナーで落ちるため、
-    # Windowsでは開発サーバーの起動・後始末を明示する (taskkillは標準搭載)。
-    # ランナー同梱Chromeとnpmのchromedriverの版ずれを避けるため、版の揃った組を取得して使う。
-    - name: Layer A UI tests
-      env:
-        WDIO_FORCE_BROWSER_DOWNLOAD: '1'
-      run: |
-        $vite = Start-Process -FilePath 'npm.cmd' -ArgumentList 'run','dev' -PassThru -WindowStyle Hidden
-        $wdioExit = 0
-        try {
-          $ready = $false
-          for ($i = 0; $i -lt 60; $i++) {
-            try {
-              if ((Invoke-WebRequest -Uri 'http://localhost:1420' -UseBasicParsing -TimeoutSec 2).StatusCode -eq 200) { $ready = $true; break }
-            } catch {}
-            Start-Sleep -Seconds 2
-          }
-          if (-not $ready) { throw 'dev server not ready' }
-          npx wdio run ./wdio.conf.ts
-          $wdioExit = $LASTEXITCODE
-        } finally {
-          taskkill /PID $vite.Id /T /F 2>$null
-        }
-        exit $wdioExit
-      shell: pwsh
-
-    # 4. 版一元性: リリースと同じ検証コマンドで検査する (YAMLへ重複実装しない)
+    # 版名 ($env:stem/$env:zip/$env:sha) はリリースと同じ検証コマンドの出力を使う。
     - name: Check version unity
-      run: |
-        node scripts/verify-version.mjs | Tee-Object -Variable verifyOut
-        $verifyOut | Out-File $env:workdir/validation-summary.txt -Append
+      if: github.event_name != 'pull_request'
+      run: node scripts/verify-version.mjs
       shell: pwsh
 
-    # 5. リリース互換ビルド (配布物は作らない)
+    # リリース互換ビルド (配布物は保存しない)
     - name: Release-compatible build
+      if: github.event_name != 'pull_request'
       run: npm run tauri build -- --no-bundle
 
-    # 6. Layer Bのネイティブスモークテストはここでは実施しない。
-    # Layer Bの正本は native-e2e.yml の hosted-uia-smoke（正確な実行ファイルを検査する）。
-    # smoke-native.ps1 自体は残す（手動・ホスト環境での利用のため）。
-
-    # 7. 配布物検査 (Layer Bの環境起因失敗と独立に実測する)
-    # 実装は scripts/package-release.ps1 が正本 (ZIP命名/stage/sha形式の重複実装禁止)。
-    # 版名は `Check version unity` (verify-version.mjs) の出力 ($env:stem/$env:zip/$env:sha) をそのまま使う。
+    # 配布物検査。実装は scripts/package-release.ps1 が正本 (ZIP命名/stage/sha形式の重複実装禁止)。
+    # 結果は Artifact にせず、実行の要約に書く。
     - name: Package and hash check
-      if: always()
+      if: github.event_name != 'pull_request'
       run: |
-        $summary = Join-Path $env:workdir "validation-summary.txt"
-        ./scripts/package-release.ps1 -Stem $env:stem -Zip $env:zip -Sha $env:sha -OutDir $env:workdir -Summary $summary
-      shell: pwsh
-
-    # PR（フォーク含む）でも動くため、実行ファイルは保存しない。検証要約だけを残す。
-    - name: Upload validation summary
-      if: always()
-      uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-      with:
-        name: windows-validation-summary
-        path: |
-          ${{ env.workdir }}/validation-summary.txt
-        retention-days: 1
-        if-no-files-found: warn
-    # 後始末: 一時作業ディレクトリを消す
-    - name: Cleanup temp workdir
-      if: always()
-      run: Remove-Item -Recurse -Force $env:workdir -ErrorAction SilentlyContinue
+        $workdir = Join-Path $env:RUNNER_TEMP 'validate'
+        New-Item -ItemType Directory -Force -Path $workdir | Out-Null
+        $summary = Join-Path $workdir 'validation-summary.txt'
+        "ref=$env:GITHUB_REF" | Out-File $summary
+        try {
+          ./scripts/package-release.ps1 -Stem $env:stem -Zip $env:zip -Sha $env:sha -OutDir $workdir -Summary $summary
+        } finally {
+          "# Windows validation`n" >> $env:GITHUB_STEP_SUMMARY
+          '```' >> $env:GITHUB_STEP_SUMMARY
+          Get-Content $summary >> $env:GITHUB_STEP_SUMMARY
+          '```' >> $env:GITHUB_STEP_SUMMARY
+        }
       shell: pwsh

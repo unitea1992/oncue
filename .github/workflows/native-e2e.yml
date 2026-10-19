@@ -28,11 +28,11 @@
 # いずれの経路も「選択したブランチのチェックアウト」は信用せず、確定した正確なSHA
 # のみをチェックアウトの参照先へ結び付ける。開始時に
 # BUILD_RUN_ID / BUILD_HEAD_SHA / CHECKOUT_SHA を出力し、不一致なら失敗させる。
-name: Native E2E (hosted, Layer B)
+name: "配布: 起動確認（Windows）"
 
 on:
   workflow_run:
-    workflows: ['Build Portable Windows App']
+    workflows: ['配布: Windows版ビルドとRelease下書き']
     types: [completed]
   workflow_dispatch:
     inputs:

@@ -23,7 +23,12 @@ updates:
       day: "monday"
       time: "09:00"
       timezone: "Asia/Tokyo"
-    open-pull-requests-limit: 10
+    open-pull-requests-limit: 5
+    # minor / patch は1件の PR にまとめる (PR ごとの CI を減らし、react と react-dom のような組を揃える)
+    groups:
+      minor-and-patch:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
     commit-message:
       prefix: "chore"
       include: "scope"
@@ -38,7 +43,12 @@ updates:
       day: "monday"
       time: "09:00"
       timezone: "Asia/Tokyo"
-    open-pull-requests-limit: 10
+    open-pull-requests-limit: 5
+    # minor / patch は1件の PR にまとめる (PR ごとの CI を減らし、react と react-dom のような組を揃える)
+    groups:
+      minor-and-patch:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
     commit-message:
       prefix: "chore"
       include: "scope"
