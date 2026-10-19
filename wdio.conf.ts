@@ -106,7 +106,7 @@ export const config = {
   runner: 'local',
   specs: ['./tests/ui/**/*.spec.ts'],
   // 並列数。CI は WDIO_MAX_INSTANCES で上げる。
-  maxInstances: Number(process.env.WDIO_MAX_INSTANCES ?? 1),
+  maxInstances: Math.max(1, Math.floor(Number(process.env.WDIO_MAX_INSTANCES)) || 1),
   // headless Chrome のため仮想ディスプレイは不要。wdio は DISPLAY 不在の Linux で
   // ワーカーを xvfb-run 経由で起動するが、Ubuntu 26.04 の xvfb-run は fd 3 を閉じて
   // コマンドを実行するため、fd 3 を使う wdio の IPC が壊れ全ワーカーが `write EINVAL` で落ちる。
