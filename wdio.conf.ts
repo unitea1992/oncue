@@ -124,8 +124,10 @@ export const config = {
       // `session not created: Chrome instance exited` (chromedriver /session)。
       // hosted sandbox 下では sandbox/shared-memory/GPU なしで起動する必要がある。
       // ローカル実行でも無害な flags のみ。headless は継続。
+      // 画面の大きさを明示する。既定の大きさは Chrome の種類で違い、ランナーの Chrome では
+      // ダイアログの下に貼り付く保存の帯がボタンに重なり、クリックが待たされた。
       'goog:chromeOptions': {
-        args: ['--headless=new', '--no-sandbox', '--disable-dev-shm-usage', '--disable-gpu'],
+        args: ['--headless=new', '--no-sandbox', '--disable-dev-shm-usage', '--disable-gpu', '--window-size=1280,800'],
       },
     },
   ],
