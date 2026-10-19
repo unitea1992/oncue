@@ -106,7 +106,7 @@ GitHub Actions はすべて GitHub ホストランナーで動き、secrets は�
 | ワークフロー | 起動条件 | 内容 |
 |---|---|---|
 | `検査: フロントエンド・版・fmt` | PR / main への push / 手動 | Ubuntu で型検査、renderer-domain テスト、フロントエンドビルド、Layer A、版の整合検査、`cargo fmt` |
-| `検査: Rust（Windows・MSRV）` | `src-tauri` を変える PR / main への push / 手動 | Windows で `clippy`・`test`、Ubuntu で依存クレートの MSRV。main への push と手動のときだけ、リリース相当のビルドと ZIP・SHA256 の検査も行います |
+| `検査: Rust（Windows・MSRV）` | `src-tauri` を変える PR / main への push / 手動 | Windows で `clippy`・`test`、Ubuntu で依存クレートの MSRV |
 | `検査: ワークフロー` | ワークフローの変更時 | ワークフローの構文を検査 |
 | `配布: Windows版ビルドとRelease下書き` | `v*` タグの push / 手動 | Windows で検証から配布用 ZIP の作成まで。ZIP は作者の動作確認用に1日だけ Artifacts に残します。タグのときは下書きの Release を作ります |
 | `配布: 起動確認（Windows）` | 配布ビルドの完了後 / 手動 | 配布ビルドが作った exe を起動し、ログイン画面が出るところまでを確認します |

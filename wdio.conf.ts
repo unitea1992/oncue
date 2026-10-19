@@ -105,7 +105,8 @@ async function downloadBrowserPair(cacheDir: string): Promise<{ binary: string; 
 export const config = {
   runner: 'local',
   specs: ['./tests/ui/**/*.spec.ts'],
-  maxInstances: 1,
+  // 並列数。CI は WDIO_MAX_INSTANCES で上げる。
+  maxInstances: Math.max(1, Math.floor(Number(process.env.WDIO_MAX_INSTANCES)) || 1),
   // headless Chrome のため仮想ディスプレイは不要。wdio は DISPLAY 不在の Linux で
   // ワーカーを xvfb-run 経由で起動するが、Ubuntu 26.04 の xvfb-run は fd 3 を閉じて
   // コマンドを実行するため、fd 3 を使う wdio の IPC が壊れ全ワーカーが `write EINVAL` で落ちる。
@@ -146,6 +147,12 @@ export const config = {
       const sys = systemChromeBinary();
       if (sys) {
         // system Chrome があれば従来通り (driver は npm package の chromedriver)。
+        // GitHub ホストランナーは Chrome と版の揃った chromedriver を CHROMEWEBDRIVER に置くので、
+        // あればそちらを使い、ダウンロードを省く。
+        const runnerDriver = process.env.CHROMEWEBDRIVER
+          ? join(process.env.CHROMEWEBDRIVER, process.platform === 'win32' ? 'chromedriver.exe' : 'chromedriver')
+          : '';
+        if (runnerDriver && existsSync(runnerDriver)) driverBin = runnerDriver;
       } else {
         const cacheDir =
           process.env.WDIO_BROWSER_CACHE ?? join(tmpdir(), 'wdio-browsers');
