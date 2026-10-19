@@ -26,11 +26,11 @@
   "dependencies": {
     "@tauri-apps/api": "^2",
     "lucide-react": "^0",
-    "react": "^19.3.0",
-    "react-dom": "^19.3.0"
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1"
   },
   "devDependencies": {
-    "@puppeteer/browsers": "^3.2.4",
+    "@puppeteer/browsers": "^3.2.5",
     "@tauri-apps/cli": "^2",
     "@types/mocha": "^10",
     "@types/react": "^19.3.0",
