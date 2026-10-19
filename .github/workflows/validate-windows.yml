@@ -1,7 +1,7 @@
 # Rust の検査。
 # src-tauri に cfg(windows) ゲートのコードがあるため、clippy / test は Windows で回す。
 # PR では Rust に関わる変更のときだけ clippy / test を回す (npm だけの更新では走らせない)。
-# リリース相当のビルドと ZIP の検査は main の push と手動実行だけで行う。
+# ビルド済みのアプリは配布しないため、リリース相当のビルドはここでは行わない (build-portable.yml の手動実行で行う)。
 # フロントエンドの型検査・テスト・Layer A・cargo fmt・版の整合は ci.yml が受け持つ。
 #
 # 注意: tauri-plugin-wdio / wdio capability / withGlobalTauri / test-only surface を
@@ -44,10 +44,9 @@ jobs:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - name: Setup Rust
-        uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable action code
-        with:
-          toolchain: stable
+      # cargo metadata だけなので、ランナーに入っている Rust を使う。
+      - name: Show Rust toolchain
+        run: cargo -V
 
       - name: Resolve Windows dependency metadata
         run: >-
@@ -142,45 +141,3 @@ jobs:
     - name: Rust tests
       working-directory: src-tauri
       run: cargo test --lib --locked
-
-    # ここから下は main の push と手動実行だけ (PR では時間がかかるため省く)。
-    - name: Setup Node.js
-      if: github.event_name != 'pull_request'
-      uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
-      with:
-        node-version: '24'
-        cache: npm
-
-    - name: Install dependencies
-      if: github.event_name != 'pull_request'
-      run: npm ci
-
-    # 版名 ($env:stem/$env:zip/$env:sha) はリリースと同じ検証コマンドの出力を使う。
-    - name: Check version unity
-      if: github.event_name != 'pull_request'
-      run: node scripts/verify-version.mjs
-      shell: pwsh
-
-    # リリース互換ビルド (配布物は保存しない)
-    - name: Release-compatible build
-      if: github.event_name != 'pull_request'
-      run: npm run tauri build -- --no-bundle
-
-    # 配布物検査。実装は scripts/package-release.ps1 が正本 (ZIP命名/stage/sha形式の重複実装禁止)。
-    # 結果は Artifact にせず、実行の要約に書く。
-    - name: Package and hash check
-      if: github.event_name != 'pull_request'
-      run: |
-        $workdir = Join-Path $env:RUNNER_TEMP 'validate'
-        New-Item -ItemType Directory -Force -Path $workdir | Out-Null
-        $summary = Join-Path $workdir 'validation-summary.txt'
-        "ref=$env:GITHUB_REF" | Out-File $summary
-        try {
-          ./scripts/package-release.ps1 -Stem $env:stem -Zip $env:zip -Sha $env:sha -OutDir $workdir -Summary $summary
-        } finally {
-          "# Windows validation`n" >> $env:GITHUB_STEP_SUMMARY
-          '```' >> $env:GITHUB_STEP_SUMMARY
-          Get-Content $summary >> $env:GITHUB_STEP_SUMMARY
-          '```' >> $env:GITHUB_STEP_SUMMARY
-        }
-      shell: pwsh

@@ -146,6 +146,12 @@ export const config = {
       const sys = systemChromeBinary();
       if (sys) {
         // system Chrome があれば従来通り (driver は npm package の chromedriver)。
+        // GitHub ホストランナーは Chrome と版の揃った chromedriver を CHROMEWEBDRIVER に置くので、
+        // あればそちらを使い、ダウンロードを省く。
+        const runnerDriver = process.env.CHROMEWEBDRIVER
+          ? join(process.env.CHROMEWEBDRIVER, process.platform === 'win32' ? 'chromedriver.exe' : 'chromedriver')
+          : '';
+        if (runnerDriver && existsSync(runnerDriver)) driverBin = runnerDriver;
       } else {
         const cacheDir =
           process.env.WDIO_BROWSER_CACHE ?? join(tmpdir(), 'wdio-browsers');
