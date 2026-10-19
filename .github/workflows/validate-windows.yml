@@ -109,35 +109,46 @@ jobs:
                   print(f"- {name} {version}: Rust {rust_version}", file=sys.stderr)
               sys.exit(1)
 
+  # clippy と test は依存のビルドを共有できないため、別のジョブにして同時に走らせる。
   validate-windows:
-    name: clippy・test（Windows）
+    name: ${{ matrix.task }}（Windows）
     runs-on: windows-latest
     timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - task: clippy
+            command: cargo clippy --all-targets --all-features --locked -- -D warnings
+          - task: test
+            command: cargo test --lib --locked
+    env:
+      # CI ではデバッグ情報を行番号だけにする (ビルドとキャッシュを軽くする。手元の dev は変えない)。
+      CARGO_PROFILE_DEV_DEBUG: line-tables-only
+      CARGO_PROFILE_TEST_DEBUG: line-tables-only
+      # レジストリは C: より速い D: に置く。
+      CARGO_HOME: D:\cargo-home
 
     steps:
     - name: Checkout
       uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-    - name: Setup Rust
-      uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable action code
-      with:
-        toolchain: stable
-        targets: x86_64-pc-windows-msvc
-        components: clippy
+    # Rust はランナーに入っている stable と clippy を使う (導入の手間を省く)。
+    - name: Show Rust toolchain
+      run: rustc -V; cargo clippy -V
+      shell: pwsh
 
     # ホストランナーは使い捨てのため、Cargoの依存とビルド成果物はActionsキャッシュで再利用する。
     - name: Cache Rust build
       uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
       with:
         workspaces: src-tauri -> target
+        # clippy と test で中身が違うので、キャッシュを分ける。
+        key: ${{ matrix.task }}
         # PR は main のキャッシュを復元するだけにし、時間のかかる保存を省く。
         # main の push では保存して次の PR が使えるキャッシュを更新する。
         save-if: ${{ github.ref == 'refs/heads/main' }}
 
-    - name: Clippy
+    - name: Run ${{ matrix.task }}
       working-directory: src-tauri
-      run: cargo clippy --all-targets --all-features --locked -- -D warnings
-
-    - name: Rust tests
-      working-directory: src-tauri
-      run: cargo test --lib --locked
+      run: ${{ matrix.command }}

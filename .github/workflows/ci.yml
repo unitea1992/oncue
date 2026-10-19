@@ -70,7 +70,10 @@ jobs:
     # Layer A (renderer-only)。開発サーバーを立てて既存 wdio.conf.ts を実行する。
     # サーバーの起動・停止はこのステップ内で完結させる。
     # ランナー同梱の Chrome と、版の揃った CHROMEWEBDRIVER の chromedriver を使う (wdio.conf.ts)。
+    # ランナーは4コアなので、spec を3本並べて走らせる (手元の既定は1本のまま)。
     - name: Layer A UI tests
+      env:
+        WDIO_MAX_INSTANCES: '3'
       run: |
         npm run dev -- --port 1420 --strictPort &
         vite_pid=$!
