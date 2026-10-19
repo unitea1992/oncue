@@ -1,6 +1,7 @@
 # 共通の検査 (ubuntu-latest)。
 # UI typecheck / renderer-domain tests / フロントエンドビルド (検証専用) /
 # Layer A (renderer-only) / 版の整合 / cargo fmt を pull_request + main push で回す。
+# 互いに依存しない検査は、ステップの並列実行 (background / parallel) で同時に走らせる。
 #
 # 注意:
 # - Rust tests/clippy は含めない。src-tauri に cfg(windows) ゲートの
@@ -40,54 +41,63 @@ jobs:
     - name: Checkout
       uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
+    # fmt は node_modules が要らないので、npm の準備と同時に裏で走らせる。
+    # Rust はランナーに入っている stable と rustfmt を使う (fmt だけのため導入を省く)。
+    - name: Rust fmt
+      id: fmt
+      background: true
+      working-directory: src-tauri
+      run: rustc -V && cargo fmt -- --check
+
     - name: Setup Node.js
       uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
       with:
         node-version: '24'
         cache: npm
 
-    # Rust はランナーに入っている stable と rustfmt を使う (fmt だけのため導入を省く)。
-    - name: Show Rust toolchain
-      run: rustc -V && cargo fmt --version
-
     - name: Install dependencies
       run: npm ci
 
-    - name: UI typecheck
-      run: npm run test:ui:typecheck
+    # Layer A 用の開発サーバー。裏で動かし、最後に止める。
+    - name: Start dev server
+      id: vite
+      background: true
+      run: npm run dev -- --port 1420 --strictPort
 
-    - name: Renderer-domain tests
-      run: npm test
+    # 互いに依存しない検査を同時に走らせる。いちばん長いのは Layer A。
+    - parallel:
+      - name: UI typecheck
+        run: npm run test:ui:typecheck
 
-    # 版一元性: リリースと同じ検証コマンドで検査する (YAMLへ重複実装しない)
-    - name: Check version unity
-      run: node scripts/verify-version.mjs
+      - name: Renderer-domain tests
+        run: npm test
 
-    # 検証専用: 成果物の扱いは変えず、Windows 側へ独立ビルドは追加しない。
-    - name: Frontend build (verification only)
-      run: npm run build
+      # 版一元性: リリースと同じ検証コマンドで検査する (YAMLへ重複実装しない)
+      - name: Check version unity
+        run: node scripts/verify-version.mjs
 
-    # Layer A (renderer-only)。開発サーバーを立てて既存 wdio.conf.ts を実行する。
-    # サーバーの起動・停止はこのステップ内で完結させる。
-    # ランナー同梱の Chrome と、版の揃った CHROMEWEBDRIVER の chromedriver を使う (wdio.conf.ts)。
-    # ランナーは4コアなので、spec を3本並べて走らせる (手元の既定は1本のまま)。
-    - name: Layer A UI tests
-      env:
-        WDIO_MAX_INSTANCES: '3'
-      run: |
-        npm run dev -- --port 1420 --strictPort &
-        vite_pid=$!
-        cleanup() { kill "$vite_pid" 2>/dev/null || true; }
-        trap cleanup EXIT
-        ready=0
-        for _ in $(seq 1 60); do
-          if curl -fsS -o /dev/null --max-time 2 http://localhost:1420; then ready=1; break; fi
-          sleep 2
-        done
-        if [ "$ready" != "1" ]; then echo 'dev server not ready' >&2; exit 1; fi
-        npx wdio run ./wdio.conf.ts
-      shell: bash
+      # 検証専用: 成果物の扱いは変えず、Windows 側へ独立ビルドは追加しない。
+      - name: Frontend build (verification only)
+        run: npm run build
 
-    - name: Rust fmt
-      working-directory: src-tauri
-      run: cargo fmt -- --check
+      # Layer A (renderer-only)。既存 wdio.conf.ts を実行する。
+      # ランナー同梱の Chrome と、版の揃った CHROMEWEBDRIVER の chromedriver を使う (wdio.conf.ts)。
+      # ランナーは4コアなので、spec を3本並べて走らせる (手元の既定は1本のまま)。
+      - name: Layer A UI tests
+        env:
+          WDIO_MAX_INSTANCES: '3'
+        run: |
+          ready=0
+          for _ in $(seq 1 60); do
+            if curl -fsS -o /dev/null --max-time 2 http://localhost:1420; then ready=1; break; fi
+            sleep 1
+          done
+          if [ "$ready" != "1" ]; then echo 'dev server not ready' >&2; exit 1; fi
+          npx wdio run ./wdio.conf.ts
+        shell: bash
+
+    - name: Stop dev server
+      cancel: vite
+
+    - name: Wait for Rust fmt
+      wait: fmt
