@@ -59,10 +59,12 @@ jobs:
       run: npm ci
 
     # Layer A 用の開発サーバー。裏で動かし、最後に止める。
+    # npm を挟むと停止の合図が届かず猶予切れまで待つため、vite を直接起動する。
     - name: Start dev server
       id: vite
       background: true
-      run: npm run dev -- --port 1420 --strictPort
+      run: exec node node_modules/vite/bin/vite.js --port 1420 --strictPort
+      shell: bash
 
     # 互いに依存しない検査を同時に走らせる。いちばん長いのは Layer A。
     - parallel:
