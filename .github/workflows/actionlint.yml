@@ -1,4 +1,4 @@
-name: Lint GitHub Actions workflows
+name: "検査: ワークフロー"
 
 on:
   pull_request:

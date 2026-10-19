@@ -1,4 +1,4 @@
-name: Build Portable Windows App
+name: "配布: Windows版ビルドとRelease下書き"
 
 # トリガー: 手動実行またはバージョンタグ付きプッシュのみ (配布物を作るジョブのため)
 on:

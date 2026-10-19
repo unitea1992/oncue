@@ -1,15 +1,15 @@
-# GitHub-hosted quality gate (ubuntu-latest)。
+# 共通の検査 (ubuntu-latest)。
 # UI typecheck / renderer-domain tests / フロントエンドビルド (検証専用) /
-# Layer A (renderer-only) / cargo fmt を pull_request + main push で回す。
+# Layer A (renderer-only) / 版の整合 / cargo fmt を pull_request + main push で回す。
 #
 # 注意:
 # - Rust tests/clippy は含めない。src-tauri に cfg(windows) ゲートの
 #   コードがあり、Linux 上の test/clippy では本番構成を検証できないため、
-#   Windows 側の gate に一任する。ここでは構成非依存の cargo fmt のみ行う。
+#   validate-windows.yml に一任する。ここでは構成非依存の cargo fmt のみ行う。
 # - フロントエンドビルドは検証専用。Windows 側へ独立ビルドは追加せず、
 #   beforeBuildCommand は一本化のままにする。
 # - Layer A は既存 wdio.conf.ts をそのまま使う (本ファイルから読むだけ)。
-name: CI (hosted quality gate)
+name: "検査: フロントエンド・版・fmt"
 
 on:
   workflow_dispatch:
@@ -59,6 +59,10 @@ jobs:
 
     - name: Renderer-domain tests
       run: npm test
+
+    # 版一元性: リリースと同じ検証コマンドで検査する (YAMLへ重複実装しない)
+    - name: Check version unity
+      run: node scripts/verify-version.mjs
 
     # 検証専用: 成果物の扱いは変えず、Windows 側へ独立ビルドは追加しない。
     - name: Frontend build (verification only)
