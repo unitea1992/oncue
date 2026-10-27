@@ -53,7 +53,7 @@
   "overrides": {
     "deepmerge-ts": "^8.0.2",
     "@puppeteer/browsers": "$@puppeteer/browsers",
-    "serialize-javascript": "^7.1.2",
+    "serialize-javascript": "^7.1.4",
     "basic-ftp": "^6.2.1"
   }
 }
