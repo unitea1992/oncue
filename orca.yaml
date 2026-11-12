@@ -1,0 +1,4 @@
+# Orca が worktree を作ったときに流す台本。終わってからエージェントを起こす。
+scripts:
+  setup: npm ci
+setupAgentStartupPolicy: wait-for-setup
